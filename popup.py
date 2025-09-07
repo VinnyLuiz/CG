@@ -1,3 +1,4 @@
+import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 from objetos import *
@@ -153,3 +154,16 @@ class Popup(tk.Toplevel):
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
         return f"{tipo}_{count + 1}"
+    
+    def ponto_para_wc(window, x, y):
+        # "Desfaz" a rotação da window para inserir no WC
+        cx = (window.xw_min + window.xw_max) / 2
+        cy = (window.yw_min + window.yw_max) / 2
+        dx = x - cx
+        dy = y - cy
+        theta = math.radians(window.angle)
+        xr = dx * math.cos(theta) - dy * math.sin(theta)
+        yr = dx * math.sin(theta) + dy * math.cos(theta)
+        xr += cx
+        yr += cy
+        return xr, yr

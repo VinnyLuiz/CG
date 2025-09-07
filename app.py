@@ -1,19 +1,25 @@
 from tkinter import *
 from tkinter import ttk
+import math
+from tkinter import messagebox
 from popup import Popup
 from displayFile import DisplayFile
 from tranformacoes import Window, Viewport, matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
+
+from tkinter import filedialog, messagebox
+from descritor_obj import DescritorOBJ
+
 
 class App(Tk):
     def __init__(self):
         super().__init__()
         self.title("Editor de Objetos 2D")
-        self.geometry("1000x700+300+100")
 
         # Estado
         self.display_file = DisplayFile("objetos_salvos.txt")
         self.objeto_selecionado = None
 
+        self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
         # Configuração grid principal
         self.columnconfigure(0, weight=0)
         self.columnconfigure(1, weight=1)
@@ -41,6 +47,20 @@ class App(Tk):
 
         self.redesenhar()
 
+        
+    def importar_obj(self):
+        caminho_arquivo = filedialog.askopenfilename(
+            title="Selecione o arquivo OBJ para importar",
+            filetypes=[("OBJ Files", "*.obj"), ("Todos os arquivos", "*.*")]
+        )
+        if not caminho_arquivo:
+            return
+        caminho = DescritorOBJ.importar(self.display_file, nome_arquivo=caminho_arquivo)
+        self.redesenhar()
+        messagebox.showinfo(
+            "Importação realizada",
+            f"Arquivo OBJ importado com sucesso!\nCaminho: {caminho}"
+        )
     def _criar_menu_contexto(self):
         context_menu_frame = ttk.LabelFrame(self, text="Menu de ações", padding=20)
         context_menu_frame.grid(column=0, row=0, rowspan=2, padx=10, pady=10, sticky="ns")
@@ -128,19 +148,42 @@ class App(Tk):
         self.radio_arbitrario = ttk.Radiobutton(labelFrame_transformacoes, text="Arbitrário", variable=self.centro_rotacao_var, value="arbitrario")
         self.radio_arbitrario.grid(column=3, row=6, sticky="w")
 
+
+        # Campo para rotação da window
+        label_rot_frame = ttk.Frame(labelFrame_window)
+        label_rot_frame.grid(column=0, row=2, columnspan=2, pady=8)
+        ttk.Label(label_rot_frame, text="Rotação (graus):").pack(side=LEFT)
+        self.entry_window_angle = ttk.Entry(label_rot_frame, width=6)
+        self.entry_window_angle.pack(side=LEFT)
+        ttk.Button(label_rot_frame, text="↻", width=2, command=self.rotacionar_window).pack(side=LEFT, padx=4)
+
         # Botão para aplicar transformação
         ttk.Button(labelFrame_transformacoes, text="Aplicar transformação", command=self.aplicar_transformacao_objeto).grid(column=0, row=7, columnspan=4, pady=10)
 
-        # Ligação do evento para atualizar campos
+        ttk.Label(context_menu_frame, text="").grid(column=0, row=98, pady=20)
+
+        # Frame separado para os botões OBJ, no final do método
+        frame_obj = ttk.Frame(context_menu_frame)
+        frame_obj.grid(column=0, row=99, pady=(20, 0), sticky="ew")
+        ttk.Button(frame_obj, text="Exportar OBJ", command=self.exportar_obj).pack(side=TOP, fill=X, pady=2)
+        ttk.Button(frame_obj, text="Importar OBJ", command=self.importar_obj).pack(side=TOP, fill=X, pady=2)
+            # Ligação do evento para atualizar campos
         self.combo_tipo.bind("<<ComboboxSelected>>", self._atualizar_transformacao_inputs)
 
         # Chama a função para ajustar a interface ao iniciar
         self._atualizar_transformacao_inputs()
+
+    def rotacionar_window(self):
+        try:
+            angulo = float(self.entry_window_angle.get())
+        except ValueError:
+            angulo = 0
+        self.window.set_angle(angulo)
+        self.redesenhar()
     
     def _atualizar_transformacao_inputs(self, event=None):
         tipo = self.combo_tipo.get()
         if tipo == "Translação":
-            # Mostra só dx/dy
             self.label_x.config(text="dx:")
             self.label_x.grid()
             self.entry_x.grid()
@@ -157,7 +200,6 @@ class App(Tk):
             self.radio_mundo.grid_remove()
             self.radio_arbitrario.grid_remove()
         elif tipo == "Escala":
-            # Mostra só sx/sy e centro sempre é objeto
             self.label_x.config(text="sx:")
             self.label_x.grid()
             self.entry_x.grid()
@@ -174,7 +216,6 @@ class App(Tk):
             self.radio_mundo.grid_remove()
             self.radio_arbitrario.grid_remove()
         elif tipo == "Rotação":
-            # Mostra só ângulo, centro X/Y e radios
             self.label_x.grid_remove()
             self.entry_x.grid_remove()
             self.label_y.grid_remove()
@@ -188,6 +229,7 @@ class App(Tk):
             self.radio_objeto.grid()
             self.radio_mundo.grid()
             self.radio_arbitrario.grid()
+
     def _criar_canvas(self):
         canva_frame = ttk.Frame(self)
         canva_frame.grid(column=1, row=0, sticky="nsew")
@@ -277,13 +319,19 @@ class App(Tk):
         except ValueError:
             passo_percent = 10
 
+        # Direção do "para cima" depende do ângulo da window!
+        ang = math.radians(getattr(self.window, "angle", 0))
         passo_x = (dx_percent * passo_percent / 100) * self.window.largura
         passo_y = (dy_percent * passo_percent / 100) * self.window.altura
 
-        self.window.xw_min += passo_x
-        self.window.xw_max += passo_x
-        self.window.yw_min += passo_y
-        self.window.yw_max += passo_y
+        # Rotaciona o deslocamento
+        dx = passo_x * math.cos(ang) - passo_y * math.sin(ang)
+        dy = passo_x * math.sin(ang) + passo_y * math.cos(ang)
+
+        self.window.xw_min += dx
+        self.window.xw_max += dx
+        self.window.yw_min += dy
+        self.window.yw_max += dy
 
         self.window.largura = self.window.xw_max - self.window.xw_min
         self.window.altura = self.window.yw_max - self.window.yw_min
@@ -301,7 +349,6 @@ class App(Tk):
 
     def pan_right(self):
         self.pan(dx_percent=1)
-
 
     def aplicar_transformacao_objeto(self):
         if not self.objeto_selecionado:
@@ -356,6 +403,13 @@ class App(Tk):
 
             aplicar_matriz(obj, matriz)
         self.redesenhar()
+
+    def exportar_obj(self):
+        from descritor_obj import DescritorOBJ
+        caminho = DescritorOBJ.exportar(self.display_file)
+        messagebox.showinfo("Exportação realizada",
+            f"Arquivo OBJ exportado com sucesso!\nCaminho: {caminho}")
+
 if __name__ == "__main__":
     app = App()
     app.mainloop()

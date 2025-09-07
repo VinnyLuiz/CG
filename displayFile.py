@@ -29,6 +29,20 @@ class DisplayFile:
         self.objetos.append(objeto)
         self.salvar_em_arquivo()
 
+    def adicionar_from_obj(self, nome, coords, tipo=None):
+        """Adiciona um objeto vindo do importador OBJ"""
+        if tipo == "reta" and len(coords) == 2:
+            obj = Reta(Ponto(*coords[0]), Ponto(*coords[1]), nome=nome)
+        elif tipo == "wireframe" and len(coords) >= 2:
+            pontos = [Ponto(*c) for c in coords]
+            obj = Wireframe(pontos, nome=nome)
+        elif tipo == "ponto" or (len(coords) == 1):
+            obj = Ponto(coords[0][0], coords[0][1], nome=nome)
+        else:
+            print(f"[WARN] Tipo '{tipo}' ou coords inválidos para {nome}")
+            return
+        self.objetos.append(obj)
+
     def remover(self, objeto):
         """Remove um Objeto, pelo nome do objeto ou por objeto em si"""
         if type(objeto) == str:

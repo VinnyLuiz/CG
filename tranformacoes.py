@@ -3,17 +3,21 @@ import numpy as np
 
 class Window:
     """Classe que gerencia os coordenadas de uma Window (sistema do mundo)"""
-    def __init__(self, xw_min: float, yw_min: float, xw_max: float, yw_max: float):
+    def __init__(self, xw_min, yw_min, xw_max, yw_max, angle=0):
         self.xw_min = xw_min
         self.yw_min = yw_min
         self.xw_max = xw_max
         self.yw_max = yw_max
         self.largura = xw_max - xw_min
         self.altura = yw_max - yw_min
+        self.angle = angle
+    
+    def set_angle(self, angle):
+        self.angle = angle
+
 
 class Viewport:
-    """Classe que gerencia os coordenadas de uma Viewport (sistema de tela)"""
-    def __init__(self, xvp_min: float, yvp_min: float, xvp_max: float, yvp_max: float):
+    def __init__(self, xvp_min, yvp_min, xvp_max, yvp_max):
         self.xvp_min = xvp_min
         self.yvp_min = yvp_min
         self.xvp_max = xvp_max
@@ -21,23 +25,40 @@ class Viewport:
         self.largura = xvp_max - xvp_min
         self.altura = yvp_max - yvp_min
 
-    def mundo_para_viewport(self, window: Window, x_w: float, y_w: float):
-        """Transforma coordenadas do mundo diretamente para viewport em um único passo"""
-        x_vp = self.xvp_min + ((x_w - window.xw_min) / window.largura) * self.largura
-        y_vp = self.yvp_min + (1 - (y_w - window.yw_min) / window.altura) * self.altura
+    def mundo_para_scn(self, window, x_w, y_w):
+        """Transforma coordenadas do mundo para SCN (aplica rotação da window)"""
+        # Centro da window
+        cx = (window.xw_min + window.xw_max) / 2
+        cy = (window.yw_min + window.yw_max) / 2
+        # Translada para origem (centro da window)
+        dx = x_w - cx
+        dy = y_w - cy
+        # Rotaciona -window.angle (em rad)
+        theta = -math.radians(getattr(window, "angle", 0))
+        xr = dx * math.cos(theta) - dy * math.sin(theta)
+        yr = dx * math.sin(theta) + dy * math.cos(theta)
+        # Volta ao centro
+        xr += cx
+        yr += cy
+        # Normaliza para SCN [0,1]
+        xn = (xr - window.xw_min) / window.largura
+        yn = (yr - window.yw_min) / window.altura
+        return xn, yn
+
+    def scn_para_viewport(self, xn, yn):
+        """Transforma SCN para Viewport"""
+        x_vp = self.xvp_min + xn * self.largura
+        y_vp = self.yvp_min + (1 - yn) * self.altura  # Y invertido
         return x_vp, y_vp
 
-    def viewport_para_mundo(self, window: Window, x_vp: float, y_vp: float):
-        """Transforma coordenadas da viewport para coordenadas do mundo"""
-        x_w = window.xw_min + ((x_vp - self.xvp_min) / self.largura) * window.largura
-        y_w = window.yw_min + (1 - (y_vp - self.yvp_min) / self.altura) * window.altura
-        return x_w, y_w
+    def mundo_para_viewport(self, window, x_w, y_w):
+        """Transforma coordenadas do mundo para viewport (com rotação da window)"""
+        xn, yn = self.mundo_para_scn(window, x_w, y_w)
+        return self.scn_para_viewport(xn, yn)
 
-    def esta_dentro_viewport(self, x_vp: float, y_vp: float):
-        """Verifica se as coordenadas estão dentro da viewport"""
+    def esta_dentro_viewport(self, x_vp, y_vp):
         return (self.xvp_min <= x_vp <= self.xvp_max and 
                 self.yvp_min <= y_vp <= self.yvp_max)
-    
 
 def matriz_translacao(dx, dy):
     return np.array([
