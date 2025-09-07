@@ -5,23 +5,21 @@ class Ponto:
     def __init__(self, x: float, y: float, nome="ponto"):
         self.x = x
         self.y = y
-        self.x_scn = 0
-        self.y_scn = 0
         self.nome = nome
         self.size = 6
         self.selecionado = False
 
     def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
-        x_vp, y_vp = viewport.scn_para_viewport(self.x_scn, self.y_scn)
+        x_view, y_view = viewport.mundo_para_viewport(window, self.x, self.y)
         
         # Verifica se está dentro do viewport
-        if viewport.esta_dentro_viewport(x_vp, y_vp):
+        if viewport.esta_dentro_viewport(x_view, y_view):
             cor = "blue" if self.selecionado else "black"
-            canvas.create_oval(x_vp - self.size/2, y_vp - self.size/2,
-                              x_vp + self.size/2, y_vp + self.size/2,
+            canvas.create_oval(x_view - self.size/2, y_view - self.size/2,
+                              x_view + self.size/2, y_view + self.size/2,
                               fill=cor, outline="black", width=2)
             if self.selecionado:
-                canvas.create_text(x_vp, y_vp - 20, text=self.nome, fill="blue")
+                canvas.create_text(x_view, y_view - 20, text=self.nome, fill="blue")
 
 
 class Reta:
@@ -34,8 +32,8 @@ class Reta:
 
 
     def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
-        x0, y0 = viewport.scn_para_viewport(self.ponto0.x_scn, self.ponto0.y_scn)
-        x1, y1 = viewport.scn_para_viewport(self.ponto1.x_scn, self.ponto1.y_scn)
+        x0, y0 = viewport.mundo_para_viewport(window, self.ponto0.x, self.ponto0.y)
+        x1, y1 = viewport.mundo_para_viewport(window, self.ponto1.x, self.ponto1.y)
         
         # Checa se há ao menos um ponto dentro do viewport
         if (viewport.esta_dentro_viewport(x0, y0) or 
@@ -64,9 +62,9 @@ class Wireframe:
         algum_ponto_dentro = False
         
         for p in self.lista_pontos:
-            x_vp, y_vp = viewport.scn_para_viewport(p.x_scn, p.y_scn)
-            lista_coordenadas.extend([x_vp, y_vp])
-            if viewport.esta_dentro_viewport(x_vp, y_vp):
+            x_view, y_view = viewport.mundo_para_viewport(window, p.x, p.y)
+            lista_coordenadas.extend([x_view, y_view])
+            if viewport.esta_dentro_viewport(x_view, y_view):
                 algum_ponto_dentro = True
         
         # Só desenha se pelo menos um ponto estiver dentro do viewport

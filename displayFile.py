@@ -56,11 +56,11 @@ class DisplayFile:
     def serializar_objeto(self, obj):
         """Transforma o objeto em string para salvar no arquivo"""
         if obj.__class__.__name__ == "Ponto":
-            return f"Ponto;{obj.nome};{obj.x};{obj.y}"
+            return f"Ponto;{obj.nome};{obj.x_wc};{obj.y_wc}"
         elif obj.__class__.__name__ == "Reta":
-            return f"Reta;{obj.nome};{obj.ponto0.x};{obj.ponto0.y};{obj.ponto1.x};{obj.ponto1.y}"
+            return f"Reta;{obj.nome};{obj.ponto0.x_wc};{obj.ponto0.y_wc};{obj.ponto1.x_wc};{obj.ponto1.y_wc}"
         elif obj.__class__.__name__ == "Wireframe":
-            coords = ";".join([f"{p.x};{p.y}" for p in obj.lista_pontos])
+            coords = ";".join([f"{p.x_wc};{p.y_wc}" for p in obj.lista_pontos])
             return f"Wireframe;{obj.nome};{coords}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
@@ -91,3 +91,15 @@ class DisplayFile:
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
             return None
+
+    def atualizar_scn(self, window):
+        for obj in self.objetos:
+            if isinstance(obj, Ponto):
+                obj.x_scn, obj.y_scn = window.mundo_para_scn(obj.x, obj.y)
+            elif isinstance(obj, Reta):
+                obj.ponto0.x_scn, obj.ponto0.y_scn = window.mundo_para_scn(obj.ponto0.x, obj.ponto0.y)
+                obj.ponto1.x_scn, obj.ponto1.y_scn = window.mundo_para_scn(obj.ponto1.x, obj.ponto1.y)
+            elif isinstance(obj, Wireframe):
+                for p in obj.lista_pontos:
+                    p.x_scn, p.y_scn = window.mundo_para_scn(p.x, p.y)
+
