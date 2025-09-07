@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from objetos import *
 from displayFile import DisplayFile
+from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
+
 
 class Popup(tk.Toplevel):
     def __init__(self, master, display_file: DisplayFile):
@@ -153,3 +155,146 @@ class Popup(tk.Toplevel):
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
         return f"{tipo}_{count + 1}"
+    
+class PopupTransformacoes(tk.Toplevel):
+    def __init__(self, parent, objeto, callback_redesenhar):
+        super().__init__(parent)
+        self.title(f"Transformações: {objeto.nome}")
+        self.geometry("500x300")
+        self.objeto = objeto
+        self.callback_redesenhar = callback_redesenhar
+
+        # Tipo da transformação
+        ttk.Label(self, text="Tipo:").grid(column=0, row=0, sticky="w", padx=5, pady=5)
+        self.combo_tipo = ttk.Combobox(
+            self, values=["Translação", "Escala", "Rotação"],
+            state="readonly", width=15
+        )
+        self.combo_tipo.grid(column=1, row=0, padx=5, pady=5)
+        self.combo_tipo.current(0)
+
+        # Entradas
+        self.label_x = ttk.Label(self, text="dx:")
+        self.label_x.grid(column=0, row=1, sticky="w", padx=5, pady=5)
+        self.entry_x = ttk.Entry(self, width=10)
+        self.entry_x.grid(column=1, row=1, padx=5, pady=5)
+
+        self.label_y = ttk.Label(self, text="dy:")
+        self.label_y.grid(column=0, row=2, sticky="w", padx=5, pady=5)
+        self.entry_y = ttk.Entry(self, width=10)
+        self.entry_y.grid(column=1, row=2, padx=5, pady=5)
+
+        self.label_angulo = ttk.Label(self, text="Ângulo (graus):")
+        self.label_angulo.grid(column=0, row=3, sticky="w", padx=5, pady=5)
+        self.entry_angulo = ttk.Entry(self, width=10)
+        self.entry_angulo.grid(column=1, row=3, padx=5, pady=5)
+
+        # Centro Arbitrário
+        self.label_cx = ttk.Label(self, text="Centro X (Arbitrário):")
+        self.label_cx.grid(column=0, row=4, sticky="w", padx=5, pady=5)
+        self.entry_cx = ttk.Entry(self, width=10)
+        self.entry_cx.grid(column=1, row=4, padx=5, pady=5)
+
+        self.label_cy = ttk.Label(self, text="Centro Y (Arbitrário):")
+        self.label_cy.grid(column=0, row=5, sticky="w", padx=5, pady=5)
+        self.entry_cy = ttk.Entry(self, width=10)
+        self.entry_cy.grid(column=1, row=5, padx=5, pady=5)
+
+        # Centro de rotação (aparece só em Rotação)
+        self.label_radio = ttk.Label(self, text="Centro da Rotação:")
+        self.centro_rotacao_var = tk.StringVar(value="objeto")
+        self.radio_objeto = ttk.Radiobutton(self, text="Objeto", variable=self.centro_rotacao_var, value="objeto")
+        self.radio_mundo = ttk.Radiobutton(self, text="Mundo", variable=self.centro_rotacao_var, value="mundo")
+        self.radio_arbitrario = ttk.Radiobutton(self, text="Arbitrário", variable=self.centro_rotacao_var, value="arbitrario")
+
+        # Botão aplicar
+        ttk.Button(self, text="Aplicar transformação", command=self.aplicar).grid(column=0, row=7, columnspan=4, pady=10)
+
+        # Ajusta inputs dinamicamente
+        self.combo_tipo.bind("<<ComboboxSelected>>", self._atualizar_inputs)
+        self._atualizar_inputs()
+
+    def _atualizar_inputs(self, event=None):
+        tipo = self.combo_tipo.get()
+
+        if tipo == "Translação":
+            self.label_x.config(text="dx:")
+            self.label_y.config(text="dy:")
+            self.label_x.grid(); self.entry_x.grid()
+            self.label_y.grid(); self.entry_y.grid()
+
+            # Esconde ângulo e centro
+            self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
+            self.label_cx.grid_remove(); self.entry_cx.grid_remove()
+            self.label_cy.grid_remove(); self.entry_cy.grid_remove()
+            self.label_radio.grid_remove()
+            self.radio_objeto.grid_remove()
+            self.radio_mundo.grid_remove()
+            self.radio_arbitrario.grid_remove()
+
+        elif tipo == "Escala":
+            self.label_x.config(text="sx:")
+            self.label_y.config(text="sy:")
+            self.label_x.grid(); self.entry_x.grid()
+            self.label_y.grid(); self.entry_y.grid()
+
+            # Esconde ângulo e centro
+            self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
+            self.label_cx.grid_remove(); self.entry_cx.grid_remove()
+            self.label_cy.grid_remove(); self.entry_cy.grid_remove()
+            self.label_radio.grid_remove()
+            self.radio_objeto.grid_remove()
+            self.radio_mundo.grid_remove()
+            self.radio_arbitrario.grid_remove()
+
+        elif tipo == "Rotação":
+            self.label_x.grid_remove(); self.entry_x.grid_remove()
+            self.label_y.grid_remove(); self.entry_y.grid_remove()
+
+            self.label_angulo.grid(); self.entry_angulo.grid()
+            self.label_cx.grid(); self.entry_cx.grid()
+            self.label_cy.grid(); self.entry_cy.grid()
+
+            self.label_radio.grid(column=0, row=6, sticky="w", padx=5, pady=5)
+            self.radio_objeto.grid(column=1, row=6, sticky="w")
+            self.radio_mundo.grid(column=2, row=6, sticky="w")
+            self.radio_arbitrario.grid(column=3, row=6, sticky="w")
+
+    def aplicar(self):
+        tipo = self.combo_tipo.get()
+        obj = self.objeto
+
+        if tipo == "Translação":
+            dx = float(self.entry_x.get() or 0)
+            dy = float(self.entry_y.get() or 0)
+            matriz = matriz_translacao(dx, dy)
+            aplicar_matriz(obj, matriz)
+
+        elif tipo == "Escala":
+            sx = float(self.entry_x.get() or 1)
+            sy = float(self.entry_y.get() or 1)
+            cx, cy = centro_geom(obj)
+            matriz = matriz_escalonamento(sx, sy, cx, cy)
+            aplicar_matriz(obj, matriz)
+
+        elif tipo == "Rotação":
+            angulo = float(self.entry_angulo.get() or 0)
+            centro_tipo = self.centro_rotacao_var.get()
+
+            if centro_tipo == "objeto":
+                cx, cy = centro_geom(obj)
+                matriz = matriz_rotacao(angulo, cx, cy)
+            elif centro_tipo == "mundo":
+                matriz = matriz_rotacao(angulo, 0, 0)
+            elif centro_tipo == "arbitrario":
+                cx = float(self.entry_cx.get() or 0)
+                cy = float(self.entry_cy.get() or 0)
+                matriz = (
+                    matriz_translacao(cx, cy) @
+                    matriz_rotacao(angulo, 0, 0) @
+                    matriz_translacao(-cx, -cy)
+                )
+            aplicar_matriz(obj, matriz)
+
+        self.callback_redesenhar()
+        self.destroy()

@@ -25,7 +25,7 @@ class Window:
         centro_x, centro_y = self.centro()
         T = matriz_translacao(-centro_x, -centro_y)
         
-        R = matriz_rotacao(self.angulo_rotacao)
+        R = matriz_rotacao(-self.angulo_rotacao)
 
         S = matriz_escalonamento(2/self.largura, 2/self.altura)
 
@@ -68,18 +68,12 @@ def matriz_translacao(dx, dy):
     ])
 
 def matriz_escalonamento(sx, sy, cx=0, cy=0):
-    # Escala em torno de um centro
-    return np.dot(
-        np.dot(
-            matriz_translacao(-cx, -cy),
-            np.array([
-                [sx, 0, 0],
-                [0, sy, 0],
-                [0, 0, 1]
-            ])
-        ),
-        matriz_translacao(cx, cy)
-    )
+    S = np.array([
+        [sx, 0, 0],
+        [0, sy, 0],
+        [0,  0, 1]
+    ])
+    return matriz_translacao(cx, cy) @ S @ matriz_translacao(-cx, -cy)
 
 def matriz_rotacao(angulo_graus, cx=0, cy=0):
     rad = math.radians(angulo_graus)

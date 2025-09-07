@@ -56,11 +56,11 @@ class DisplayFile:
     def serializar_objeto(self, obj):
         """Transforma o objeto em string para salvar no arquivo"""
         if obj.__class__.__name__ == "Ponto":
-            return f"Ponto;{obj.nome};{obj.x_wc};{obj.y_wc}"
+            return f"Ponto;{obj.nome};{obj.x};{obj.y}"
         elif obj.__class__.__name__ == "Reta":
-            return f"Reta;{obj.nome};{obj.ponto0.x_wc};{obj.ponto0.y_wc};{obj.ponto1.x_wc};{obj.ponto1.y_wc}"
+            return f"Reta;{obj.nome};{obj.ponto0.x};{obj.ponto0.y};{obj.ponto1.x};{obj.ponto1.y}"
         elif obj.__class__.__name__ == "Wireframe":
-            coords = ";".join([f"{p.x_wc};{p.y_wc}" for p in obj.lista_pontos])
+            coords = ";".join([f"{p.x};{p.y}" for p in obj.lista_pontos])
             return f"Wireframe;{obj.nome};{coords}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
@@ -91,6 +91,20 @@ class DisplayFile:
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
             return None
+         
+    def adicionar_from_obj(self, nome, coords, tipo=None):
+        """Adiciona um objeto vindo do importador OBJ"""
+        if tipo == "reta" and len(coords) == 2:
+            obj = Reta(Ponto(*coords[0]), Ponto(*coords[1]), nome=nome)
+        elif tipo == "wireframe" and len(coords) >= 2:
+            pontos = [Ponto(*c) for c in coords]
+            obj = Wireframe(pontos, nome=nome)
+        elif tipo == "ponto" or (len(coords) == 1):
+            obj = Ponto(coords[0][0], coords[0][1], nome=nome)
+        else:
+            print(f"[WARN] Tipo '{tipo}' ou coords inválidos para {nome}")
+            return
+        self.objetos.append(obj)  
 
     def atualizar_scn(self, window):
         for obj in self.objetos:
