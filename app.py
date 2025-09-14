@@ -33,9 +33,18 @@ class App(Tk):
         x_window = 500
         y_window = 500
 
-        self.window = Window(-x_window, -y_window, x_window, y_window)
-        self.viewport = Viewport(0, 0, self.max_w_viewport, self.max_h_viewport)
+        self.window = Window(-1000, -1000, 1000, 1000)
+        self.viewport_margin_left = 40
+        self.viewport_margin_top = 40
+        self.viewport_margin_right = 40
+        self.viewport_margin_bottom = 80
 
+        self.viewport = Viewport(
+        self.viewport_margin_left,
+        self.viewport_margin_top,
+        self.max_w_viewport - self.viewport_margin_right,
+        self.max_h_viewport - self.viewport_margin_bottom
+        )
         self.text.set(f"Dimensão do Viewport: {self.canvas.winfo_width()}x{self.canvas.winfo_height()}\n"
                       f"Centro: {x_window:.1f}x{y_window:.1f}\n\n")
 
@@ -45,6 +54,12 @@ class App(Tk):
     def _criar_menu_contexto(self):
         context_menu_frame = ttk.LabelFrame(self, text="Menu de ações", padding=20)
         context_menu_frame.grid(column=0, row=0, rowspan=2, padx=10, pady=10, sticky="ns")
+
+
+        self.clipping_method = StringVar(value="cohen-sutherland")
+        ttk.Label(context_menu_frame, text="Clipagem de Reta:").grid(column=0, row=6, sticky="w", pady=(10,0))
+        ttk.Radiobutton(context_menu_frame, text="Cohen-Sutherland", variable=self.clipping_method, value="cohen-sutherland").grid(column=0, row=7, sticky="w")
+        ttk.Radiobutton(context_menu_frame, text="Liang-Barsky", variable=self.clipping_method, value="liang-barsky").grid(column=0, row=8, sticky="w")
 
         # Lista de objetos
         ttk.Label(context_menu_frame, text="Objetos").grid(column=0, row=0)
@@ -102,6 +117,8 @@ class App(Tk):
     def _criar_canvas(self):
         self.canvas = Canvas(self, bg="white")
         self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(20, 0))
+        self.viewport_margin = 40
+
 
     def _criar_status_bar(self):
         self.text = StringVar()
@@ -125,6 +142,12 @@ class App(Tk):
         for obj in self.display_file.objetos:
             obj.desenhar(self.canvas, self.window, self.viewport)
             self.listbox_objetos.insert(END, obj.nome)
+        # Desenha a linha vermelha no contorno da viewport
+        self.canvas.create_rectangle(
+        self.viewport.xvp_min, self.viewport.yvp_min,
+        self.viewport.xvp_max, self.viewport.yvp_max,
+        outline="red", width=2
+        )
 
     def adicionar_objeto(self):
         popup = Popup(self, display_file=self.display_file)

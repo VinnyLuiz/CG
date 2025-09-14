@@ -1,28 +1,35 @@
 from tkinter import Canvas
 from tranformacoes import Window, Viewport
+from clipping import (
+    clip_point_scn,
+    sutherland_hodgman_scn,
+    cohen_sutherland_clip_scn,
+    liang_barsky_clip_scn,
+)
 
 class Ponto:
     def __init__(self, x: float, y: float, nome="ponto"):
         self.x = x
         self.y = y
-        self.x_scn = 0
-        self.y_scn = 0
         self.nome = nome
         self.size = 6
         self.selecionado = False
 
     def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
-        x_vp, y_vp = viewport.scn_para_viewport(self.x_scn, self.y_scn)
-        
-        # Verifica se está dentro do viewport
-        if viewport.esta_dentro_viewport(x_vp, y_vp):
-            cor = "blue" if self.selecionado else "black"
-            canvas.create_oval(x_vp - self.size/2, y_vp - self.size/2,
-                              x_vp + self.size/2, y_vp + self.size/2,
-                              fill=cor, outline="black", width=2)
-            if self.selecionado:
-                canvas.create_text(x_vp, y_vp - 20, text=self.nome, fill="blue")
+        # Calcula SCN, faz o clipping em SCN
+        x_scn, y_scn = window.mundo_para_scn(self.x, self.y)
+        if not clip_point_scn(x_scn, y_scn):
+            return  # Fora da window (SCN)
 
+        x_vp, y_vp = viewport.scn_para_viewport(x_scn, y_scn)
+        cor = "blue" if self.selecionado else "black"
+        canvas.create_oval(
+            x_vp - self.size / 2, y_vp - self.size / 2,
+            x_vp + self.size / 2, y_vp + self.size / 2,
+            fill=cor, outline="black", width=2
+        )
+        if self.selecionado:
+            canvas.create_text(x_vp, y_vp - 20, text=self.nome, fill="blue")
 
 class Reta:
     """Reta de um ponto até outro"""
@@ -32,57 +39,71 @@ class Reta:
         self.ponto1 = ponto1
         self.selecionado = False
 
+    def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport, clipping_method="cohen-sutherland"):
+        # Transforme os pontos para SCN
+        x0_scn, y0_scn = window.mundo_para_scn(self.ponto0.x, self.ponto0.y)
+        x1_scn, y1_scn = window.mundo_para_scn(self.ponto1.x, self.ponto1.y)
 
-    def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
-        x0, y0 = viewport.scn_para_viewport(self.ponto0.x_scn, self.ponto0.y_scn)
-        x1, y1 = viewport.scn_para_viewport(self.ponto1.x_scn, self.ponto1.y_scn)
-        
-        # Checa se há ao menos um ponto dentro do viewport
-        if (viewport.esta_dentro_viewport(x0, y0) or 
-            viewport.esta_dentro_viewport(x1, y1)):
-            
+        # Faça o clipping em SCN
+        if clipping_method == "liang-barsky":
+            clipped = liang_barsky_clip_scn(x0_scn, y0_scn, x1_scn, y1_scn)
+        else:
+            clipped = cohen_sutherland_clip_scn(x0_scn, y0_scn, x1_scn, y1_scn)
+
+        if clipped:
+            x0c, y0c, x1c, y1c = clipped
+
+            x0_vp, y0_vp = viewport.scn_para_viewport(x0c, y0c)
+            x1_vp, y1_vp = viewport.scn_para_viewport(x1c, y1c)
+
             cor = "blue" if self.selecionado else "black"
-            canvas.create_line(x0, y0, x1, y1, fill=cor, width=2)
-            
-            # Mostra nome se selecionado
+            canvas.create_line(x0_vp, y0_vp, x1_vp, y1_vp, fill=cor, width=2)
+
             if self.selecionado:
-                centro_x = (x0 + x1) / 2
-                centro_y = (y0 + y1) / 2
+                centro_x = (x0_vp + x1_vp) / 2
+                centro_y = (y0_vp + y1_vp) / 2
                 canvas.create_text(centro_x, centro_y - 15, text=self.nome, fill="blue")
-     
 
 class Wireframe:
     """Conjunto de pontos interligados por retas"""
-    def __init__(self, lista_pontos : list[Ponto], nome="wireframe"):
+    def __init__(self, lista_pontos : list, nome="wireframe", preenchido=False):
         self.nome = nome
         self.lista_pontos = lista_pontos
         self.selecionado = False
-
+        self.preenchido = preenchido  # True para polígono preenchido
 
     def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
-        lista_coordenadas = []
-        algum_ponto_dentro = False
-        
-        for p in self.lista_pontos:
-            x_vp, y_vp = viewport.scn_para_viewport(p.x_scn, p.y_scn)
-            lista_coordenadas.extend([x_vp, y_vp])
-            if viewport.esta_dentro_viewport(x_vp, y_vp):
-                algum_ponto_dentro = True
-        
-        # Só desenha se pelo menos um ponto estiver dentro do viewport
-        if algum_ponto_dentro and len(self.lista_pontos) >= 2:
+        pontos_scn = [window.mundo_para_scn(p.x, p.y) for p in self.lista_pontos]
+        if len(pontos_scn) < 2:
+            # Só tem um ponto, desenha como ponto
+            x_scn, y_scn = pontos_scn[0]
+            if not clip_point_scn(x_scn, y_scn):
+                return
+            x_vp, y_vp = viewport.scn_para_viewport(x_scn, y_scn)
             cor = "blue" if self.selecionado else "black"
-            canvas.create_line(*lista_coordenadas, fill=cor, width=2)
-            
-            if self.selecionado:
-                # Calcula o centro do wireframe
-                soma_x = sum(lista_coordenadas[::2])
-                soma_y = sum(lista_coordenadas[1::2])
-                centro_x = soma_x / len(self.lista_pontos)
-                centro_y = soma_y / len(self.lista_pontos)
-                canvas.create_text(centro_x, centro_y - 15, text=self.nome, fill="blue")
+            canvas.create_oval(
+                x_vp - 3, y_vp - 3, x_vp + 3, y_vp + 3,
+                fill=cor, outline="black", width=2
+            )
+            return
 
-        elif self.lista_pontos and algum_ponto_dentro:
-            # Se só tem um ponto, desenha como ponto
-            self.lista_pontos[0].desenhar(canvas, window, viewport)
-        
+        # Clipping do wireframe no SCN
+        pontos_clipados = sutherland_hodgman_scn(pontos_scn)
+
+        if len(pontos_clipados) >= 2:
+            coords_vp = []
+            for x_scn, y_scn in pontos_clipados:
+                x_vp, y_vp = viewport.scn_para_viewport(x_scn, y_scn)
+                coords_vp.extend([x_vp, y_vp])
+
+            cor = "blue" if self.selecionado else "black"
+
+            if self.preenchido:
+                canvas.create_polygon(*coords_vp, fill="lightblue", outline=cor, width=2)
+            else:
+                canvas.create_line(*coords_vp, fill=cor, width=2)
+
+            if self.selecionado:
+                centro_x = sum(coords_vp[::2]) / len(pontos_clipados)
+                centro_y = sum(coords_vp[1::2]) / len(pontos_clipados)
+                canvas.create_text(centro_x, centro_y - 15, text=self.nome, fill="blue")

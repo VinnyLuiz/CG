@@ -58,7 +58,12 @@ class Viewport:
         x_vp = self.xvp_min + ((x_scn + 1) / 2.0) * self.largura
         y_vp = self.yvp_min + (1 - (y_scn + 1) / 2.0) * self.altura 
         return x_vp, y_vp
-    
+
+    def mundo_para_viewport(self, window, xw, yw):
+        """Transforma coordenadas do mundo para coordenadas do viewport"""
+        x_vp = self.xvp_min + ((xw - window.xw_min) / window.largura) * self.largura
+        y_vp = self.yvp_min + (1 - (yw - window.yw_min) / window.altura) * self.altura
+        return x_vp, y_vp
 
 def matriz_translacao(dx, dy):
     return np.array([
