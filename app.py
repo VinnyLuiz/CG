@@ -2,7 +2,7 @@ from tkinter import *
 from tkinter import ttk, filedialog, messagebox
 from popup import Popup, PopupTransformacoes
 from displayFile import DisplayFile
-from tranformacoes import Window, Viewport, matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
+from tranformacoes import Window, Viewport, matriz_rotacao
 import numpy as np
 from descritorOBJ import DescritorOBJ
 
@@ -27,17 +27,17 @@ class App(Tk):
         self._criar_status_bar()
 
         # Viewport e Window
-        self.update_idletasks()
-        self.max_w_viewport = self.canvas.winfo_width()
-        self.max_h_viewport = self.canvas.winfo_height()
         x_window = 500
         y_window = 500
 
+        self.text.set(f"Dimensão do Viewport: {self.canvas.winfo_width()}x{self.canvas.winfo_height()}")
         self.window = Window(-x_window, -y_window, x_window, y_window)
-        self.viewport = Viewport(0, 0, self.max_w_viewport, self.max_h_viewport)
 
-        self.text.set(f"Dimensão do Viewport: {self.canvas.winfo_width()}x{self.canvas.winfo_height()}\n"
-                      f"Centro: {x_window:.1f}x{y_window:.1f}\n\n")
+        self.update_idletasks()
+        self.max_w_viewport = self.canvas.winfo_width() - 10
+        self.max_h_viewport = self.canvas.winfo_height() - 10
+        self.viewport = Viewport(10, 10, self.max_w_viewport, self.max_h_viewport)
+
 
         self.redesenhar()
 
@@ -80,8 +80,8 @@ class App(Tk):
         ttk.Label(labelFrame_window, text="Ângulo:").grid(column=0, row=1, padx=10)
         
         # Frame de arquivo
-        ttk.Button(context_menu_frame, text="Salvar Arquivo", width=15, command=self.exportar_obj).grid(column=0, row=4, pady=20)
-        ttk.Button(context_menu_frame, text="Carregar Arquivo", width=15, command=self.importar_obj).grid(column=0, row=5)
+        ttk.Button(context_menu_frame, text="Salvar Arquivo", width=15, command=self.exportar_obj).grid(column=0, row=5, pady=5)
+        ttk.Button(context_menu_frame, text="Carregar Arquivo", width=15, command=self.importar_obj).grid(column=0, row=6)
 
         # Botões de Movimento
         frame_botoes_movimento = ttk.Frame(labelFrame_window)
@@ -99,21 +99,43 @@ class App(Tk):
         ttk.Button(frame_botoes_zoom, text="+", width=2, command=self.zoom_in).grid(column=0, row=0, padx=(0, 5), pady=5)
         ttk.Button(frame_botoes_zoom, text="-", width=2, command=self.zoom_out).grid(column=0, row=1, padx=(0, 5), pady=5)
 
+        # RadioButton Clipping
+        self.metodo_clipping = StringVar(value="Cohen-Sutherland")
+        frame_clipping = ttk.LabelFrame(context_menu_frame, text="Clipping de Retas")
+        frame_clipping.grid(row=4, padx=5, pady=5)
+
+        ttk.Radiobutton(
+            frame_clipping,
+            text="Cohen-Sutherland",
+            variable=self.metodo_clipping,
+            value="Cohen-Sutherland",
+            command=self.redesenhar
+        ).pack(anchor="w", padx=10, pady=2)
+
+        ttk.Radiobutton(
+            frame_clipping,
+            text="Nicholl-Lee-Nicholl",
+            variable=self.metodo_clipping,
+            value="Nicholl-Lee-Nicholl",
+            command=self.redesenhar
+        ).pack(anchor="w", padx=10, pady=2)
+
+
     def _criar_canvas(self):
         self.canvas = Canvas(self, bg="white")
         self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(20, 0))
 
     def _criar_status_bar(self):
         self.text = StringVar()
-        transcript_label = ttk.Label(self, textvariable=self.text, relief="sunken")
+        transcript_label = Label(self, textvariable=self.text, relief="sunken", anchor="nw", height=4)
         transcript_label.grid(column=1, row=1, sticky="nsew", padx=(0, 10), pady=10)
 
     def redesenhar(self):
         self.canvas.delete("all")
         self.listbox_objetos.delete(0, END)
 
-        self.canvas.create_rectangle(0, 0, self.max_w_viewport, self.max_h_viewport, outline="red")
-        self.canvas.create_text(5, 10, text="Viewport", anchor="w")
+        self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}")
+        self.canvas.create_rectangle(10, 10, self.max_w_viewport, self.max_h_viewport, outline="red")
 
         self.display_file.atualizar_scn(self.window)
         for obj in self.display_file.objetos:
@@ -123,7 +145,10 @@ class App(Tk):
             self.objeto_selecionado.selecionado = True
 
         for obj in self.display_file.objetos:
-            obj.desenhar(self.canvas, self.window, self.viewport)
+            if obj.__class__.__name__== "Reta":
+                obj.desenhar(self.canvas, self.window, self.viewport, self.metodo_clipping.get())
+            else:    
+                obj.desenhar(self.canvas, self.window, self.viewport)
             self.listbox_objetos.insert(END, obj.nome)
 
     def adicionar_objeto(self):
@@ -200,16 +225,23 @@ class App(Tk):
 
         # Agora aplicamos a matriz de rotação para alinhar o vup com o mundo
         vup_window = np.array([passo_x, passo_y, 1])
-        R = matriz_rotacao(-self.window.angulo_rotacao)
+        R = matriz_rotacao(self.window.angulo_rotacao)
         vup_mundo = R @ vup_window
 
         novo_x, novo_y = vup_mundo[0], vup_mundo[1]
 
-        self.window.xw_min += novo_x
-        self.window.xw_max += novo_x
-        self.window.yw_min += novo_y
-        self.window.yw_max += novo_y
+        # Get current window center
+        centro_x_atual, centro_y_atual = self.window.centro()
 
+        # Calculate new window center
+        novo_centro_x = centro_x_atual + novo_x
+        novo_centro_y = centro_y_atual + novo_y
+
+        # Update window boundaries based on new center
+        self.window.xw_min = novo_centro_x - self.window.largura / 2
+        self.window.xw_max = novo_centro_x + self.window.largura / 2
+        self.window.yw_min = novo_centro_y - self.window.altura / 2
+        self.window.yw_max = novo_centro_y + self.window.altura / 2
         self.window.largura = self.window.xw_max - self.window.xw_min
         self.window.altura = self.window.yw_max - self.window.yw_min
 

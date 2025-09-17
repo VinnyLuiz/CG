@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, colorchooser
 from objetos import *
 from displayFile import DisplayFile
 from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
@@ -8,7 +8,7 @@ from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotaca
 class Popup(tk.Toplevel):
     def __init__(self, master, display_file: DisplayFile):
         super().__init__(master)
-        self.geometry("400x300+300+100")
+        self.geometry("400x500+300+100")
         self.title("Incluir Objeto")
         self.aba_atual = 0
         self.display_file = display_file
@@ -61,6 +61,16 @@ class Popup(tk.Toplevel):
 
         btn_add_ponto = tk.Button(frame_wireframe, text="+ Adicionar ponto", command=self.adicionar_entry)
         btn_add_ponto.pack()
+        # Checkbutton de preenchimento
+        self.preencher_var = tk.BooleanVar(value=False)
+        self.check_preencher = ttk.Checkbutton(frame_wireframe, text="Preencher", variable=self.preencher_var)
+        self.check_preencher.pack(anchor="center", padx=10, pady=5)
+
+        # Color picker
+        self.cor_preenchimento = "#000000" # Cor inicial
+        self.label_cor = tk.Label(frame_wireframe, text="Cor: #000000", bg=self.cor_preenchimento, fg="white", relief="solid")
+        self.label_cor.pack(anchor="center", padx=10, pady=5)
+        ttk.Button(frame_wireframe, text="Escolher Cor", command=self.escolher_cor).pack(anchor="center", padx=10, pady=5)
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -112,8 +122,11 @@ class Popup(tk.Toplevel):
                         y = float(entry_y.get())
                         pontos.append(Ponto(float(x), float(y), f"p{i}"))
 
+                    preencher = self.preencher_var.get()
+                    cor_preenchimento = self.cor_preenchimento
+
                     if pontos:  # só cria se tiver pontos válidos
-                        wireframe = Wireframe(pontos, self.nome_entry.get())
+                        wireframe = Wireframe(pontos, self.nome_entry.get(), preencher=preencher, cor_preenchimento=cor_preenchimento)
                         self.display_file.adicionar(wireframe)
             self.destroy()
         except ValueError as e:
@@ -155,6 +168,14 @@ class Popup(tk.Toplevel):
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
         return f"{tipo}_{count + 1}"
+    
+    def escolher_cor(self):
+        """Abre o color picker e atualiza a cor de preenchimento"""
+        cor_selecionada = colorchooser.askcolor(title="Escolha a cor de preenchimento")
+        if cor_selecionada:
+            self.cor_preenchimento = cor_selecionada[1] # Pega o valor hexadecimal
+            self.label_cor.config(text=f"Cor de Preenchimento: {self.cor_preenchimento}", bg=self.cor_preenchimento, fg="white" if cor_selecionada[0][0] + cor_selecionada[0][1] + cor_selecionada[0][2] < 382.5 else "black")
+
     
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):

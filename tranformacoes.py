@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 class Window:
-    """Classe que gerencia os coordenadas de uma Window (sistema do mundo)"""
+    """Classe que gerencia as coordenadas de uma Window (sistema do mundo)"""
     def __init__(self, xw_min: float, yw_min: float, xw_max: float, yw_max: float):
         self.xw_min = xw_min
         self.yw_min = yw_min
@@ -48,11 +48,6 @@ class Viewport:
         self.largura = xvp_max - xvp_min
         self.altura = yvp_max - yvp_min
 
-    def esta_dentro_viewport(self, x_vp: float, y_vp: float):
-        """Verifica se as coordenadas estão dentro da viewport"""
-        return (self.xvp_min <= x_vp <= self.xvp_max and 
-                self.yvp_min <= y_vp <= self.yvp_max)
-    
     def scn_para_viewport(self, x_scn, y_scn):
         """Transforma as coordenadas normalizadas para coordenadas do viewport"""
         x_vp = self.xvp_min + ((x_scn + 1) / 2.0) * self.largura

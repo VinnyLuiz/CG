@@ -61,7 +61,7 @@ class DisplayFile:
             return f"Reta;{obj.nome};{obj.ponto0.x};{obj.ponto0.y};{obj.ponto1.x};{obj.ponto1.y}"
         elif obj.__class__.__name__ == "Wireframe":
             coords = ";".join([f"{p.x};{p.y}" for p in obj.lista_pontos])
-            return f"Wireframe;{obj.nome};{coords}"
+            return f"Wireframe;{obj.nome};{obj.preencher};{obj.cor_preenchimento};{coords}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -81,12 +81,13 @@ class DisplayFile:
             return Reta(p0, p1, nome)
 
         elif tipo == "Wireframe":
-            _, nome, *coords = partes
+            _, nome,  preencher, cor_preenchimento, *coords,= partes
             pontos = []
             for i in range(0, len(coords), 2):
                 x, y = coords[i], coords[i+1]
                 pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
-            return Wireframe(pontos, nome)
+            preencher = preencher.lower() == 'true'
+            return Wireframe(pontos, nome, preencher, cor_preenchimento)
 
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
