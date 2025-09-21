@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, colorchooser
 from objetos import *
 from displayFile import DisplayFile
 from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
+import re
 
 
 class Popup(tk.Toplevel):
@@ -58,9 +59,9 @@ class Popup(tk.Toplevel):
         self.notebook.add(frame_wireframe, text="Wireframe")
         self.pontos_frame = tk.Frame(frame_wireframe)
         self.pontos_frame.pack(pady=5)
-
         btn_add_ponto = tk.Button(frame_wireframe, text="+ Adicionar ponto", command=self.adicionar_entry)
         btn_add_ponto.pack()
+
         # Checkbutton de preenchimento
         self.preencher_var = tk.BooleanVar(value=False)
         self.check_preencher = ttk.Checkbutton(frame_wireframe, text="Preencher", variable=self.preencher_var)
@@ -71,6 +72,14 @@ class Popup(tk.Toplevel):
         self.label_cor = tk.Label(frame_wireframe, text="Cor: #000000", bg=self.cor_preenchimento, fg="white", relief="solid")
         self.label_cor.pack(anchor="center", padx=10, pady=5)
         ttk.Button(frame_wireframe, text="Escolher Cor", command=self.escolher_cor).pack(anchor="center", padx=10, pady=5)
+
+        # Aba Curva2D
+        frame_curva = ttk.Frame(self.notebook)
+        self.notebook.add(frame_curva, text="Curva2D")
+        tk.Label(frame_curva, text="Pontos: (x1, y1), (x2, y2), ...").grid(column=0, row=0)
+        self.curva_entry = ttk.Entry(frame_curva)
+        self.curva_entry.grid(column=1, row=0)
+
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -128,6 +137,18 @@ class Popup(tk.Toplevel):
                     if pontos:  # só cria se tiver pontos válidos
                         wireframe = Wireframe(pontos, self.nome_entry.get(), preencher=preencher, cor_preenchimento=cor_preenchimento)
                         self.display_file.adicionar(wireframe)
+
+                case 3: # Curva2D
+                    s = self.curva_entry.get().strip()
+                    if not s:
+                        raise ValueError("Lista de pontos vazia")
+                    coords = self._parse_pontos(s)
+                    if not coords:
+                        raise ValueError("Não foi possível interpretar os pontos")
+                    pontos = [Ponto(float(x), float(y), f"{nome}_p{i}") for i, (x, y) in enumerate(coords)]
+                    curva = Curva2D(pontos, nome)
+                    self.display_file.adicionar(curva)
+
             self.destroy()
         except ValueError as e:
             if "Já existe" in str(e):
@@ -164,6 +185,7 @@ class Popup(tk.Toplevel):
             case 0: tipo = "Ponto"
             case 1: tipo = "Reta"
             case 2: tipo = "Wireframe"
+            case 3: tipo = "Curva2D"
         
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
@@ -176,6 +198,10 @@ class Popup(tk.Toplevel):
             self.cor_preenchimento = cor_selecionada[1] # Pega o valor hexadecimal
             self.label_cor.config(text=f"Cor de Preenchimento: {self.cor_preenchimento}", bg=self.cor_preenchimento, fg="white" if cor_selecionada[0][0] + cor_selecionada[0][1] + cor_selecionada[0][2] < 382.5 else "black")
 
+    def _parse_pontos(self, s: str):
+        pattern = r'(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)'
+        matches = re.findall(pattern, s)
+        return matches
     
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):

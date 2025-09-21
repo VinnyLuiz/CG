@@ -1,5 +1,5 @@
 import os
-from objetos import Ponto, Reta, Wireframe
+from objetos import *
 
 class DisplayFile:
     def __init__(self, arquivo="objetos.txt"):
@@ -62,6 +62,9 @@ class DisplayFile:
         elif obj.__class__.__name__ == "Wireframe":
             coords = ";".join([f"{p.x};{p.y}" for p in obj.lista_pontos])
             return f"Wireframe;{obj.nome};{obj.preencher};{obj.cor_preenchimento};{coords}"
+        elif obj.__class__.__name__ == "Curva2D":
+            coords = ";".join([f"{p.x};{p.y}" for p in obj.pontos])
+            return f"Curva2D;{obj.nome};{coords}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -88,6 +91,17 @@ class DisplayFile:
                 pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
             preencher = preencher.lower() == 'true'
             return Wireframe(pontos, nome, preencher, cor_preenchimento)
+        
+        elif tipo == "Curva2D":
+            if len(partes) < 4:
+                return None
+            _, nome, *coords = partes
+            pontos = []
+            for i in range(0, len(coords), 2):
+                x, y = coords[i], coords[i+1]
+                pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
+            return Curva2D(pontos, nome)
+            
 
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
@@ -116,5 +130,8 @@ class DisplayFile:
                 obj.ponto1.x_scn, obj.ponto1.y_scn = window.mundo_para_scn(obj.ponto1.x, obj.ponto1.y)
             elif isinstance(obj, Wireframe):
                 for p in obj.lista_pontos:
+                    p.x_scn, p.y_scn = window.mundo_para_scn(p.x, p.y)
+            elif isinstance(obj, Curva2D):
+                for p in obj.p_curvas:
                     p.x_scn, p.y_scn = window.mundo_para_scn(p.x, p.y)
 

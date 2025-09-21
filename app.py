@@ -230,14 +230,14 @@ class App(Tk):
 
         novo_x, novo_y = vup_mundo[0], vup_mundo[1]
 
-        # Get current window center
+        # Pega o centro da window
         centro_x_atual, centro_y_atual = self.window.centro()
 
-        # Calculate new window center
+        # Calcula o novo centro 
         novo_centro_x = centro_x_atual + novo_x
         novo_centro_y = centro_y_atual + novo_y
 
-        # Update window boundaries based on new center
+        # Atualiza os limites da window com o novo centro
         self.window.xw_min = novo_centro_x - self.window.largura / 2
         self.window.xw_max = novo_centro_x + self.window.largura / 2
         self.window.yw_min = novo_centro_y - self.window.altura / 2

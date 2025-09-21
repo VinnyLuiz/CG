@@ -1,6 +1,7 @@
 from tkinter import Canvas
 from tranformacoes import Window, Viewport
 from clipping import clip_ponto, clip_reta_CS, clip_reta_NLN, clip_poligono
+import numpy as np
 
 class Ponto:
     def __init__(self, x: float, y: float, nome="ponto"):
@@ -78,8 +79,8 @@ class Wireframe:
             # Calcula o centro do wireframe
             xs = [p[0] for p in coordenadas_vp]
             ys = [p[1] for p in coordenadas_vp]
-            centro_x = sum(xs) / len(xs)
-            centro_y  = sum(ys) / len(xs)
+            centro_x = sum(xs) / len(coordenadas_vp)
+            centro_y  = sum(ys) / len(coordenadas_vp)
             canvas.create_text(centro_x, centro_y, text=self.nome, fill="blue")
 
     def preencher_(self, canvas: Canvas, coordenadas_vp):
@@ -117,3 +118,48 @@ class Wireframe:
                     x_end = int(intersections[i+1])
                     canvas.create_line(x_start, y, x_end, y, fill=self.cor_preenchimento)
             
+class Curva2D:
+    """Curva 2D usando o método de Bezier"""
+    def __init__(self, lista_pontos: list, nome):
+        self.nome = nome
+        self.pontos = lista_pontos
+        self.p_curvas = []
+        self.selecionado = False
+        self.calcular_pontos_curva()
+
+    def calcular_pontos_curva(self, k=500):
+        passo = 1/k
+        for i in range(0, len(self.pontos) - 1, 3):
+            if i+3 >= len(self.pontos):
+                break
+            P1, P2, P3, P4 = self.pontos[i:i+4]
+            for t in np.arange(0, 1 + passo, passo):
+                T = [t**3, t**2, t, 1]
+                x_t = P1.x * (-3*T[0] + 3*T[1] - 3*T[2] + T[3]) + P2.x * (3*T[0] - 6*T[1] + 3*T[2]) + P3.x * (-3*T[0]+ 3*T[1]) + P4.x *(T[0])
+                y_t = P1.y * (-3*T[0] + 3*T[1] - 3*T[2] + T[3]) + P2.y * (3*T[0] - 6*T[1] + 3*T[2]) + P3.y * (-3*T[0]+ 3*T[1]) + P4.y *(T[0])
+                self.p_curvas.append(Ponto(x_t, y_t))
+        
+    def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
+        if len(self.p_curvas) < 2:
+            return
+        p_clipados = []
+        cor = "blue" if self.selecionado else "black"
+        for p in self.p_curvas:
+            if clip_ponto(p.x_scn, p.y_scn):
+                p_clipados.append(p)
+        
+        for i in range(len(p_clipados) - 1):
+            p1 = p_clipados[i]
+            p2 = p_clipados[i + 1]
+            x1_vp, y1_vp = viewport.scn_para_viewport(p1.x_scn, p1.y_scn)
+            x2_vp, y2_vp = viewport.scn_para_viewport(p2.x_scn, p2.y_scn)
+            canvas.create_line(x1_vp, y1_vp, x2_vp, y2_vp, fill=cor, width=2)
+            if self.selecionado and p1 == p_clipados[len(p_clipados)//2]:
+                canvas.create_text(x1_vp, y1_vp + 15, text=self.nome)
+
+
+
+
+
+
+
