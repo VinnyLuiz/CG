@@ -1,14 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from obj_curva2d import Curva2D
 from objetos import *
 from displayFile import DisplayFile
 from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
 
-
 class Popup(tk.Toplevel):
     def __init__(self, master, display_file: DisplayFile):
         super().__init__(master)
-        self.geometry("400x300+300+100")
+        self.geometry("400x350+300+100")
         self.title("Incluir Objeto")
         self.aba_atual = 0
         self.display_file = display_file
@@ -58,9 +58,17 @@ class Popup(tk.Toplevel):
         self.notebook.add(frame_wireframe, text="Wireframe")
         self.pontos_frame = tk.Frame(frame_wireframe)
         self.pontos_frame.pack(pady=5)
-
         btn_add_ponto = tk.Button(frame_wireframe, text="+ Adicionar ponto", command=self.adicionar_entry)
         btn_add_ponto.pack()
+
+        # Aba Curva2D
+        frame_curva = ttk.Frame(self.notebook)
+        self.lista_entry_curva = []
+        self.notebook.add(frame_curva, text="Curva")
+        self.pontos_frame_curva = tk.Frame(frame_curva)
+        self.pontos_frame_curva.pack(pady=5)
+        btn_add_ponto_curva = tk.Button(frame_curva, text="+ Adicionar ponto", command=self.adicionar_entry_curva)
+        btn_add_ponto_curva.pack()
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -68,34 +76,27 @@ class Popup(tk.Toplevel):
         tk.Button(btn_frame, text="Cancelar", command=self.destroy).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Adicionar", command=self.adicionar_objeto).pack(side="left", padx=5)
 
-
     def mudar_aba(self, event):
         self.aba_atual = self.notebook.index(self.notebook.select())
-        
+
     def adicionar_objeto(self):
         try:
             nome = self.nome_entry.get()
-            
-            # Gera um nome genérico caso deixe em branco
             if not nome:
                 nome = self.gerar_nome_gen()
                 self.nome_entry.delete(0, tk.END)
                 self.nome_entry.insert(0, nome)
-            
-            # Verifica se o nome já existe no displayFile
             if self.display_file.nome_existe(nome):
                 messagebox.showerror("Erro", f"Já existe um objeto com o nome '{nome}'")
                 return
-            
 
             match self.aba_atual:
-                case 0: # Ponto
+                case 0:  # Ponto
                     x = float(self.x_ponto.get())
                     y = float(self.y_ponto.get())
                     ponto = Ponto(x, y, self.nome_entry.get())
                     self.display_file.adicionar(ponto)
-                
-                case 1: # Reta
+                case 1:  # Reta
                     x = float(self.x0_reta.get())
                     y = float(self.y0_reta.get())
                     ponto0 = Ponto(x, y, "ponto0")
@@ -104,46 +105,66 @@ class Popup(tk.Toplevel):
                     ponto1 = Ponto(x, y, "ponto1")
                     reta = Reta(ponto0, ponto1, self.nome_entry.get())
                     self.display_file.adicionar(reta)
-
-                case 2: # Wireframe
+                case 2:  # Wireframe
                     pontos = []
                     for i, (entry_x, entry_y) in enumerate(self.lista_entry):
                         x = float(entry_x.get())
                         y = float(entry_y.get())
                         pontos.append(Ponto(float(x), float(y), f"p{i}"))
-
-                    if pontos:  # só cria se tiver pontos válidos
+                    if pontos:
                         wireframe = Wireframe(pontos, self.nome_entry.get())
                         self.display_file.adicionar(wireframe)
+                case 3:  # Curva2D
+                    pontos = []
+                    for i, (entry_x, entry_y) in enumerate(self.lista_entry_curva):
+                        x = float(entry_x.get())
+                        y = float(entry_y.get())
+                        pontos.append(Ponto(float(x), float(y), f"p{i}"))
+                    if len(pontos) >= 4:
+                        curva = Curva2D(pontos, self.nome_entry.get())
+                        self.display_file.adicionar(curva)
+                    else:
+                        messagebox.showerror("Erro", "Curva requer pelo menos 4 pontos")
+                        return
             self.destroy()
         except ValueError as e:
             if "Já existe" in str(e):
                 messagebox.showerror("Nome duplicado", str(e))
             else:
                 messagebox.showerror("Coordenada Inválida", "Por favor insira coordenadas válidas")
-        
+
     def adicionar_entry(self):
         """Adiciona uma linha nova de entradas X e Y para o wireframe"""
         row = len(self.lista_entry)
         lbl = tk.Label(self.pontos_frame, text=f"Ponto{row}:")
         lbl.grid(row=row, column=0, padx=5, pady=2)
-
         entry_x = tk.Entry(self.pontos_frame, width=4, validate="key", validatecommand=self.vcmd)
         entry_y = tk.Entry(self.pontos_frame, width=4, validate="key", validatecommand=self.vcmd)
         entry_x.grid(row=row, column=1)
         entry_y.grid(row=row, column=2)
         self.lista_entry.append((entry_x, entry_y))
 
+    def adicionar_entry_curva(self):
+        """Adiciona uma linha nova de entradas X e Y para a curva"""
+        row = len(self.lista_entry_curva)
+        lbl = tk.Label(self.pontos_frame_curva, text=f"Ponto{row}:")
+        lbl.grid(row=row, column=0, padx=5, pady=2)
+        entry_x = tk.Entry(self.pontos_frame_curva, width=4, validate="key", validatecommand=self.vcmd)
+        entry_y = tk.Entry(self.pontos_frame_curva, width=4, validate="key", validatecommand=self.vcmd)
+        entry_x.grid(row=row, column=1)
+        entry_y.grid(row=row, column=2)
+        self.lista_entry_curva.append((entry_x, entry_y))
+
     def validar_entry_numerica(self, texto):
         """Permite apenas digitar números nas coordenadas"""
-        if texto =="-" or texto == "":
+        if texto == "-" or texto == "":
             return True
         try:
-            float(texto)   # tenta converter
+            float(texto)
             return True
         except ValueError:
             return False
-        
+
     def gerar_nome_gen(self):
         """Gera um nome generico baseado no tipo e quantidade"""
         tipo = ""
@@ -151,11 +172,10 @@ class Popup(tk.Toplevel):
             case 0: tipo = "Ponto"
             case 1: tipo = "Reta"
             case 2: tipo = "Wireframe"
-        
-        # Conta quantos objetos deste tipo já existem
+            case 3: tipo = "Curva"
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
         return f"{tipo}_{count + 1}"
-    
+
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):
         super().__init__(parent)
@@ -222,8 +242,6 @@ class PopupTransformacoes(tk.Toplevel):
             self.label_y.config(text="dy:")
             self.label_x.grid(); self.entry_x.grid()
             self.label_y.grid(); self.entry_y.grid()
-
-            # Esconde ângulo e centro
             self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
             self.label_cx.grid_remove(); self.entry_cx.grid_remove()
             self.label_cy.grid_remove(); self.entry_cy.grid_remove()
@@ -231,14 +249,11 @@ class PopupTransformacoes(tk.Toplevel):
             self.radio_objeto.grid_remove()
             self.radio_mundo.grid_remove()
             self.radio_arbitrario.grid_remove()
-
         elif tipo == "Escala":
             self.label_x.config(text="sx:")
             self.label_y.config(text="sy:")
             self.label_x.grid(); self.entry_x.grid()
             self.label_y.grid(); self.entry_y.grid()
-
-            # Esconde ângulo e centro
             self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
             self.label_cx.grid_remove(); self.entry_cx.grid_remove()
             self.label_cy.grid_remove(); self.entry_cy.grid_remove()
@@ -246,15 +261,12 @@ class PopupTransformacoes(tk.Toplevel):
             self.radio_objeto.grid_remove()
             self.radio_mundo.grid_remove()
             self.radio_arbitrario.grid_remove()
-
         elif tipo == "Rotação":
             self.label_x.grid_remove(); self.entry_x.grid_remove()
             self.label_y.grid_remove(); self.entry_y.grid_remove()
-
             self.label_angulo.grid(); self.entry_angulo.grid()
             self.label_cx.grid(); self.entry_cx.grid()
             self.label_cy.grid(); self.entry_cy.grid()
-
             self.label_radio.grid(column=0, row=6, sticky="w", padx=5, pady=5)
             self.radio_objeto.grid(column=1, row=6, sticky="w")
             self.radio_mundo.grid(column=2, row=6, sticky="w")
@@ -269,18 +281,15 @@ class PopupTransformacoes(tk.Toplevel):
             dy = float(self.entry_y.get() or 0)
             matriz = matriz_translacao(dx, dy)
             aplicar_matriz(obj, matriz)
-
         elif tipo == "Escala":
             sx = float(self.entry_x.get() or 1)
             sy = float(self.entry_y.get() or 1)
             cx, cy = centro_geom(obj)
             matriz = matriz_escalonamento(sx, sy, cx, cy)
             aplicar_matriz(obj, matriz)
-
         elif tipo == "Rotação":
             angulo = float(self.entry_angulo.get() or 0)
             centro_tipo = self.centro_rotacao_var.get()
-
             if centro_tipo == "objeto":
                 cx, cy = centro_geom(obj)
                 matriz = matriz_rotacao(angulo, cx, cy)
@@ -295,6 +304,5 @@ class PopupTransformacoes(tk.Toplevel):
                     matriz_translacao(-cx, -cy)
                 )
             aplicar_matriz(obj, matriz)
-
         self.callback_redesenhar()
         self.destroy()
