@@ -107,3 +107,79 @@ class Wireframe:
                 centro_x = sum(coords_vp[::2]) / len(pontos_clipados)
                 centro_y = sum(coords_vp[1::2]) / len(pontos_clipados)
                 canvas.create_text(centro_x, centro_y - 15, text=self.nome, fill="blue")
+
+class BSpline2D:
+    def __init__(self, lista_pontos, nome="b-spline"):
+        if not nome:
+            nome = "B-Spline"
+        self.lista_pontos = lista_pontos  # lista de objetos Ponto
+        self.nome = nome
+        self.selecionado = False
+        self.step = 0.02  # resolução da curva
+
+    def _fd_matrix(self, delta_t):
+        """Matriz de Forward Differences para B-Spline cúbica uniform"""
+        dt = delta_t
+        dt2 = dt*dt
+        dt3 = dt*dt*dt
+        return [
+            [0,       0,      0,   1],
+            [dt3,     dt2,    dt,  0],
+            [6*dt3,   2*dt2,  0,   0],
+            [6*dt3,   0,      0,   0]
+        ]
+
+    def _bspline_basis_matrix(self):
+        """Matriz base B-Spline cúbica"""
+        return [
+            [-1/6,  3/6, -3/6, 1/6],
+            [ 3/6, -6/6,  3/6, 0  ],
+            [-3/6, 0,     3/6, 0  ],
+            [ 1/6, 4/6,  1/6, 0  ]
+        ]
+
+    def _mult_matrix_vec(self, m, v):
+        return [sum(m[i][j]*v[j] for j in range(4)) for i in range(4)]
+
+    def gerar_pontos_bspline(self):
+        """Gera a curva usando forward differences para cada segmento de 4 pontos"""
+        pts = self.lista_pontos
+        if len(pts) < 4: return []
+        k = int(1/self.step)
+        pontos_da_curva = []
+        M_bspline = self._bspline_basis_matrix()
+        dt = self.step
+        FD = self._fd_matrix(dt)
+
+        for i in range(len(pts)-3):
+            Gx = [pts[i].x, pts[i+1].x, pts[i+2].x, pts[i+3].x]
+            Gy = [pts[i].y, pts[i+1].y, pts[i+2].y, pts[i+3].y]
+            Cx = self._mult_matrix_vec(M_bspline, Gx)
+            Cy = self._mult_matrix_vec(M_bspline, Gy)
+            Dx = self._mult_matrix_vec(FD, Cx)
+            Dy = self._mult_matrix_vec(FD, Cy)
+            # Forward Differences
+            x, dx, d2x, d3x = Dx
+            y, dy, d2y, d3y = Dy
+            curva_segmento = []
+            for _ in range(k+1):
+                curva_segmento.append((x, y))
+                x += dx; dx += d2x; d2x += d3x
+                y += dy; dy += d2y; d2y += d3y
+            pontos_da_curva.append(curva_segmento)
+        return pontos_da_curva
+
+    def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
+        segmentos = self.gerar_pontos_bspline()
+        cor = "blue" if self.selecionado else "black"
+        for curva_pts in segmentos:
+            last = None
+            for x, y in curva_pts:
+                x_scn, y_scn = window.mundo_para_scn(x, y)
+                if clip_point_scn(x_scn, y_scn):
+                    x_vp, y_vp = viewport.scn_para_viewport(x_scn, y_scn)
+                    if last:
+                        canvas.create_line(last[0], last[1], x_vp, y_vp, fill=cor, width=2)
+                    last = (x_vp, y_vp)
+                else:
+                    last = None  # quebra a linha se sair da window

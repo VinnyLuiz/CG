@@ -76,6 +76,15 @@ class Popup(tk.Toplevel):
         tk.Button(btn_frame, text="Cancelar", command=self.destroy).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Adicionar", command=self.adicionar_objeto).pack(side="left", padx=5)
 
+        # Aba B-Spline
+        frame_bspline = ttk.Frame(self.notebook)
+        self.lista_entry_bspline = []
+        self.notebook.add(frame_bspline, text="B-Spline")
+        self.pontos_frame_bspline = tk.Frame(frame_bspline)
+        self.pontos_frame_bspline.pack(pady=5)
+        btn_add_ponto_bspline = tk.Button(frame_bspline, text="+ Adicionar ponto", command=self.adicionar_entry_bspline)
+        btn_add_ponto_bspline.pack()
+
     def mudar_aba(self, event):
         self.aba_atual = self.notebook.index(self.notebook.select())
 
@@ -126,6 +135,19 @@ class Popup(tk.Toplevel):
                     else:
                         messagebox.showerror("Erro", "Curva requer pelo menos 4 pontos")
                         return
+                    
+                case 4:  # B-Spline
+                    pontos = []
+                    for i, (entry_x, entry_y) in enumerate(self.lista_entry_bspline):
+                        x = float(entry_x.get())
+                        y = float(entry_y.get())
+                        pontos.append(Ponto(float(x), float(y), f"p{i}"))
+                    if len(pontos) >= 4:
+                        spline = BSpline2D(pontos, self.nome_entry.get())
+                        self.display_file.adicionar(spline)
+                    else:
+                        messagebox.showerror("Erro", "B-Spline requer pelo menos 4 pontos")
+                        return
             self.destroy()
         except ValueError as e:
             if "Já existe" in str(e):
@@ -166,16 +188,25 @@ class Popup(tk.Toplevel):
             return False
 
     def gerar_nome_gen(self):
-        """Gera um nome generico baseado no tipo e quantidade"""
         tipo = ""
         match self.aba_atual:
             case 0: tipo = "Ponto"
             case 1: tipo = "Reta"
             case 2: tipo = "Wireframe"
             case 3: tipo = "Curva"
+            case 4: tipo = "B-Spline"
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
         return f"{tipo}_{count + 1}"
 
+    def adicionar_entry_bspline(self):
+        row = len(self.lista_entry_bspline)
+        lbl = tk.Label(self.pontos_frame_bspline, text=f"Ponto{row}:")
+        lbl.grid(row=row, column=0, padx=5, pady=2)
+        entry_x = tk.Entry(self.pontos_frame_bspline, width=4, validate="key", validatecommand=self.vcmd)
+        entry_y = tk.Entry(self.pontos_frame_bspline, width=4, validate="key", validatecommand=self.vcmd)
+        entry_x.grid(row=row, column=1)
+        entry_y.grid(row=row, column=2)
+        self.lista_entry_bspline.append((entry_x, entry_y))
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):
         super().__init__(parent)
