@@ -157,8 +157,64 @@ class Curva2D:
             if self.selecionado and p1 == p_clipados[len(p_clipados)//2]:
                 canvas.create_text(x1_vp, y1_vp + 15, text=self.nome)
 
+class BSpline:
+    def __init__(self,lista_pontos, nome):
+        self.nome = nome
+        self.pontos = lista_pontos
+        self.p_bspline = []
+        self.selecionado = False
+        pass
+    
+    def calcular_pontos_curva(self, n=100):
+        MBS = (1/6) * np.array([
+            [-1, 3, -3, 1],
+            [3, -6, 3, 0],
+            [-3, 0, 3, 0],
+            [1, 4, 1, 0]
+        ])
 
 
+        m = len(self.pontos)
+        for i in range(3, m):
+            P0 = self.pontos[i - 3]
+            P1 = self.pontos[i - 2]
+            P2 = self.pontos[i - 1]
+            P3 = self.pontos[i]
+            CX = MBS @ np.array([P0[0],P1[0],P2[0],P3[0]])
+            CY = MBS @ np.array([P0[1],P1[1],P2[1],P3[1]])
+            delta = 1.0/n
+            E = np.array([
+                [0, 0, 0, 1],
+                [delta**3, delta**2, delta, 0],
+                [6*delta**3, 2*delta**2, 0, 0],
+                [6*delta**3, 0, 0, 0]
+            ])
+            DX = E @ CX
+            DY = E @ CY
+            x, dx, d2x, d3x = DX
+            y, dy, d2y, d3y = DY
+            for i in range(n + 1):
+                self.p_bspline.append(Ponto(x, y))
+                x += dx; dx += d2x; d2x += d3x
+                y += dy; dy += d2y; d2y += d3y
+
+    def desenhar(self, canvas: Canvas, window: Window, viewport: Viewport):
+        if len(self.p_curvas) < 2:
+            return
+        p_clipados = []
+        cor = "blue" if self.selecionado else "black"
+        for p in self.p_curvas:
+            if clip_ponto(p.x_scn, p.y_scn):
+                p_clipados.append(p)
+        
+        for i in range(len(p_clipados) - 1):
+            p1 = p_clipados[i]
+            p2 = p_clipados[i + 1]
+            x1_vp, y1_vp = viewport.scn_para_viewport(p1.x_scn, p1.y_scn)
+            x2_vp, y2_vp = viewport.scn_para_viewport(p2.x_scn, p2.y_scn)
+            canvas.create_line(x1_vp, y1_vp, x2_vp, y2_vp, fill=cor, width=2)
+            if self.selecionado and p1 == p_clipados[len(p_clipados)//2]:
+                canvas.create_text(x1_vp, y1_vp + 15, text=self.nome)
 
 
 

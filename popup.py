@@ -80,6 +80,12 @@ class Popup(tk.Toplevel):
         self.curva_entry = ttk.Entry(frame_curva)
         self.curva_entry.grid(column=1, row=0)
 
+        # Aba BSpline 
+        frame_bspline = ttk.Frame(self.notebook)
+        self.notebook.add(frame_bspline, text="BSpline")
+        tk.Label(frame_bspline, text="Pontos: (x1, y1), (x2, y2), ...").grid(column=0, row=0)
+        self.bspline_entry = ttk.Entry(frame_bspline)
+        self.bspline_entry.grid(column=1, row=0)
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -145,6 +151,20 @@ class Popup(tk.Toplevel):
                     coords = self._parse_pontos(s)
                     if not coords:
                         raise ValueError("Não foi possível interpretar os pontos")
+                    if len(coords) < 4:
+                        messagebox.showerror("Erro", "Mínimo de 4 pontos são necessários.")
+                        return
+                    pontos = [Ponto(float(x), float(y), f"{nome}_p{i}") for i, (x, y) in enumerate(coords)]
+                    curva = BSpline(pontos, nome)
+                    self.display_file.adicionar(curva)
+
+                case 4: # Curva2D
+                    s = self.bspline_entry.get().strip()
+                    if not s:
+                        raise ValueError("Lista de pontos vazia")
+                    coords = self._parse_pontos(s)
+                    if not coords:
+                        raise ValueError("Não foi possível interpretar os pontos")
                     pontos = [Ponto(float(x), float(y), f"{nome}_p{i}") for i, (x, y) in enumerate(coords)]
                     curva = Curva2D(pontos, nome)
                     self.display_file.adicionar(curva)
@@ -186,6 +206,7 @@ class Popup(tk.Toplevel):
             case 1: tipo = "Reta"
             case 2: tipo = "Wireframe"
             case 3: tipo = "Curva2D"
+            case 4: tipo = "BSpline"
         
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))

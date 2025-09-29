@@ -65,6 +65,9 @@ class DisplayFile:
         elif obj.__class__.__name__ == "Curva2D":
             coords = ";".join([f"{p.x};{p.y}" for p in obj.pontos])
             return f"Curva2D;{obj.nome};{coords}"
+        elif obj.__class__.__name__ == "BSpline":
+            coords = ";".join([f"{p.x};{p.y}" for p in obj.pontos])
+            return f"BSpline;{obj.nome};{coords}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -102,6 +105,15 @@ class DisplayFile:
                 pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
             return Curva2D(pontos, nome)
             
+        elif tipo == "BSpline":
+            if len(partes) < 4:
+                return None
+            _, nome, *coords = partes
+            pontos = []
+            for i in range(0, len(coords), 2):
+                x, y = coords[i], coords[i+1]
+                pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
+            return BSpline(pontos, nome)
 
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
