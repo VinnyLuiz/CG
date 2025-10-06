@@ -5,7 +5,9 @@ from displayFile import DisplayFile
 from tranformacoes import Window, Viewport, matriz_rotacao
 import numpy as np
 from descritorOBJ import DescritorOBJ
-
+from ponto3d import Ponto3D
+from objeto3d import Objeto3D
+from projecao import projecao_paralela_ortogonal
 class App(Tk):
     def __init__(self):
         super().__init__()
@@ -29,6 +31,8 @@ class App(Tk):
         # Viewport e Window
         x_window = 500
         y_window = 500
+
+        self.objetos_3d = []  # nova lista para objetos 3D
 
         self.text.set(f"Dimensão do Viewport: {self.canvas.winfo_width()}x{self.canvas.winfo_height()}")
         self.window = Window(-x_window, -y_window, x_window, y_window)
@@ -134,8 +138,8 @@ class App(Tk):
         self.canvas.delete("all")
         self.listbox_objetos.delete(0, END)
 
-        self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}")
-        self.canvas.create_rectangle(10, 10, self.max_w_viewport, self.max_h_viewport, outline="red")
+        self.canvas.create_rectangle(0, 0, self.max_w_viewport, self.max_h_viewport, outline="red")
+        self.canvas.create_text(5, 10, text="Viewport", anchor="w")
 
         self.display_file.atualizar_scn(self.window)
         for obj in self.display_file.objetos:
@@ -144,13 +148,49 @@ class App(Tk):
         if self.objeto_selecionado:
             self.objeto_selecionado.selecionado = True
 
+        # Objetos 2D: chamada diferenciada para Reta
         for obj in self.display_file.objetos:
-            if obj.__class__.__name__== "Reta":
+            if obj.__class__.__name__ == "Reta":
                 obj.desenhar(self.canvas, self.window, self.viewport, self.metodo_clipping.get())
-            else:    
+            else:
                 obj.desenhar(self.canvas, self.window, self.viewport)
             self.listbox_objetos.insert(END, obj.nome)
 
+        # Objetos 3D
+        for obj in self.objetos_3d:
+            self.listbox_objetos.insert(END, obj.nome + " (3D)")
+            segmentos_2d = []
+            VRP = Ponto3D(0, 0, 5)
+            P2 = Ponto3D(2, 1, 0)
+            VPN = np.array([P2.x - VRP.x, P2.y - VRP.y, P2.z - VRP.z])
+            VUP = np.array([0, 1, 0])
+            for p0, p1 in obj.segmentos:
+                p0_2d = projecao_paralela_ortogonal([p0], VRP, VPN, VUP)[0]
+                p1_2d = projecao_paralela_ortogonal([p1], VRP, VPN, VUP)[0]
+                segmentos_2d.append((p0_2d, p1_2d))
+
+            for (x0, y0), (x1, y1) in segmentos_2d:
+                metodo_clip = self.metodo_clipping.get()
+                if metodo_clip == "Cohen-Sutherland":
+                    clipped = clip_reta_CS(x0, y0, x1, y1)
+                elif metodo_clip == "Nicholl-Lee-Nicholl":
+                    clipped = clip_reta_NLN(x0, y0, x1, y1)
+                else:
+                    clipped = (x0, y0, x1, y1)
+                if clipped is None:
+                    continue
+                x0c, y0c, x1c, y1c = clipped
+                x0_scn, y0_scn = self.window.mundo_para_scn(x0c, y0c)
+                x1_scn, y1_scn = self.window.mundo_para_scn(x1c, y1c)
+                x0_vp, y0_vp = self.viewport.scn_para_viewport(x0_scn, y0_scn)
+                x1_vp, y1_vp = self.viewport.scn_para_viewport(x1_scn, y1_scn)
+                self.canvas.create_line(x0_vp, y0_vp, x1_vp, y1_vp, fill="green", width=2)
+
+        self.canvas.create_rectangle(
+            self.viewport.xvp_min, self.viewport.yvp_min,
+            self.viewport.xvp_max, self.viewport.yvp_max,
+            outline="red", width=2
+        )
     def adicionar_objeto(self):
         popup = Popup(self, display_file=self.display_file)
         self.wait_window(popup)
