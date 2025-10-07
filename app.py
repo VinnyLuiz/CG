@@ -3,6 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 from popup import Popup, PopupTransformacoes
 from displayFile import DisplayFile
 from tranformacoes import Window, Viewport, matriz_rotacao
+from transformacao3D import Window3D
 import numpy as np
 from descritorOBJ import DescritorOBJ
 
@@ -37,7 +38,14 @@ class App(Tk):
         self.max_w_viewport = self.canvas.winfo_width() - 10
         self.max_h_viewport = self.canvas.winfo_height() - 10
         self.viewport = Viewport(10, 10, self.max_w_viewport, self.max_h_viewport)
-
+        
+        # View Reference Point
+        VRP_inicial = [0, 0, 0] 
+        # View Plane Normal
+        VPN_inicial = [0, 0, -1] 
+        # View Up Vector
+        VUP_inicial = [0, 1, 0] 
+        self.window3D = Window3D(VRP_inicial, VPN_inicial, VUP_inicial) 
 
         self.redesenhar()
 
@@ -137,7 +145,7 @@ class App(Tk):
         self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}")
         self.canvas.create_rectangle(10, 10, self.max_w_viewport, self.max_h_viewport, outline="red")
 
-        self.display_file.atualizar_scn(self.window)
+        self.display_file.atualizar_scn(self.window, self.window3D)
         for obj in self.display_file.objetos:
             obj.selecionado = False
 
@@ -145,9 +153,9 @@ class App(Tk):
             self.objeto_selecionado.selecionado = True
 
         for obj in self.display_file.objetos:
-            if obj.__class__.__name__== "Reta":
+            if obj.__class__.__name__ == "Reta" or obj.__class__.__name__ == "Objeto3D":
                 obj.desenhar(self.canvas, self.window, self.viewport, self.metodo_clipping.get())
-            else:    
+            else:
                 obj.desenhar(self.canvas, self.window, self.viewport)
             self.listbox_objetos.insert(END, obj.nome)
 

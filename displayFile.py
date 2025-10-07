@@ -1,5 +1,6 @@
 import os
 from objetos import *
+from objetos_3d import *
 
 class DisplayFile:
     def __init__(self, arquivo="objetos.txt"):
@@ -68,6 +69,10 @@ class DisplayFile:
         elif obj.__class__.__name__ == "BSpline":
             coords = ";".join([f"{p.x};{p.y}" for p in obj.pontos])
             return f"BSpline;{obj.nome};{coords}"
+        elif obj.__class__.__name__ == "Objeto3D":
+            pontos_str = ";".join([f"{p.x},{p.y},{p.z}" for p in obj.pontos])
+            arestas_str = ";".join([f"{i},{j}" for i, j in obj.arestas])
+            return f"Objeto3D;{obj.nome};{pontos_str};{arestas_str}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -114,6 +119,34 @@ class DisplayFile:
                 x, y = coords[i], coords[i+1]
                 pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
             return BSpline(pontos, nome)
+        elif tipo == "Objeto3D":
+            if len(partes) < 4:
+                print(f"[WARN] Objeto3D incompleto na linha: {linha}")
+                return None
+            _, nome, pontos_str_list, arestas_str_list = partes
+            pontos = []
+            p_coords_str = pontos_str_list.split(';')
+            for p_str in p_coords_str:
+                try:
+                    x, y, z = map(float, p_str.split(','))
+                    pontos.append(Ponto3D(x, y, z))
+                except ValueError:
+                    print(f"[WARN] Ponto 3D inválido em {nome}: {p_str}")
+                    continue
+            arestas = []
+            a_coords_str = arestas_str_list.split(';')
+            for a_str in a_coords_str:
+                try:
+                    i, j = map(int, a_str.split(','))
+                    arestas.append((i, j))
+                except ValueError:
+                    print(f"[WARN] Aresta inválida em {nome}: {a_str}")
+                    continue
+            if pontos and arestas:
+                return Objeto3D(pontos, arestas, nome)
+            else:
+                print(f"[WARN] Objeto3D '{nome}' sem pontos ou arestas válidas.")
+                return None
 
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
@@ -133,7 +166,7 @@ class DisplayFile:
             return
         self.objetos.append(obj)  
 
-    def atualizar_scn(self, window):
+    def atualizar_scn(self, window, window3D):
         for obj in self.objetos:
             if isinstance(obj, Ponto):
                 obj.x_scn, obj.y_scn = window.mundo_para_scn(obj.x, obj.y)
@@ -146,4 +179,14 @@ class DisplayFile:
             elif isinstance(obj, Curva2D):
                 for p in obj.p_curvas:
                     p.x_scn, p.y_scn = window.mundo_para_scn(p.x, p.y)
+            elif isinstance(obj, BSpline):
+                for p in obj.p_bspline:
+                    p.x_scn, p.y_scn = window.mundo_para_scn(p.x, p.y)
+            elif isinstance(obj, Ponto3D):
+                x_view, y_view = window3D.mundo_para_view(obj)
+                obj.x_scn, obj.y_scn = window.mundo_para_scn(x_view, y_view)
+            elif isinstance(obj, Objeto3D):
+                for p in obj.pontos:
+                    x_view, y_view = window3D.mundo_para_view(p)
+                    p.x_scn, p.y_scn = window.mundo_para_scn(x_view, y_view)
 

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, colorchooser
 from objetos import *
+from objetos_3d import *
 from displayFile import DisplayFile
 from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
 import re
@@ -86,6 +87,18 @@ class Popup(tk.Toplevel):
         tk.Label(frame_bspline, text="Pontos: (x1, y1), (x2, y2), ...").grid(column=0, row=0)
         self.bspline_entry = ttk.Entry(frame_bspline)
         self.bspline_entry.grid(column=1, row=0)
+        
+        # Aba Objeto3D
+        frame_obj3D = ttk.Frame(self.notebook)
+        self.notebook.add(frame_obj3D, text="Objeto3D")
+        tk.Label(frame_obj3D, text="Pontos: (x1, y1, z1), (x2, y2, z2), ...").grid(column=0, row=0)
+        self.pontos3d_entry = ttk.Entry(frame_obj3D)
+        self.pontos3d_entry.grid(column=1, row=0)
+        tk.Label(frame_obj3D, text="Arestas:").grid(column=0, row=1)
+        self.arestas_entry = ttk.Entry(frame_obj3D)
+        self.arestas_entry.grid(column=1, row=1)
+        tk.Label(frame_obj3D, text="Entrada das arestas utiliza o indice dos pontos").grid(column=0, row=2, columnspan=2)
+        tk.Label(frame_obj3D, text="Ex: (0, 1), (0, 2), ...").grid(column=0, row=3, columnspan=2)
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -158,7 +171,7 @@ class Popup(tk.Toplevel):
                     curva = BSpline(pontos, nome)
                     self.display_file.adicionar(curva)
 
-                case 4: # Curva2D
+                case 4: # BSpline
                     s = self.bspline_entry.get().strip()
                     if not s:
                         raise ValueError("Lista de pontos vazia")
@@ -166,8 +179,33 @@ class Popup(tk.Toplevel):
                     if not coords:
                         raise ValueError("Não foi possível interpretar os pontos")
                     pontos = [Ponto(float(x), float(y), f"{nome}_p{i}") for i, (x, y) in enumerate(coords)]
-                    curva = Curva2D(pontos, nome)
+                    curva = BSpline(pontos, nome)
                     self.display_file.adicionar(curva)
+                    
+                case 5: # Objeto3D
+                    # Parse Pontos
+                    s_pontos = self.pontos3d_entry.get().strip()
+                    if not s_pontos:
+                        raise ValueError("Lista de pontos vazia")
+                    coords_pontos = self._parse_pontos_3D(s_pontos)
+                    if not coords_pontos:
+                        raise ValueError("Não foi possível interpretar os pontos")
+                    # Parse Arestas
+                    s_arestas = self.arestas_entry.get().strip()
+                    if not s_arestas:
+                        raise ValueError("Lista de aresta vazia")
+                    arestas = self._parse_arestas(s_arestas)
+                    if not arestas:
+                        raise ValueError("Não foi possível interpretar as arestas")
+
+                    pontos = [Ponto3D(float(x), float(y), float(z)) for x, y, z in coords_pontos]
+                    n = len(coords_pontos)
+                    for i, j in arestas:
+                        if not (0 <= i < n and 0 <= j < n):
+                            raise ValueError("Arestas com índices inválidos")
+                    
+                    obj3d = Objeto3D(pontos, arestas, nome)
+                    self.display_file.adicionar(obj3d)
 
             self.destroy()
         except ValueError as e:
@@ -207,6 +245,7 @@ class Popup(tk.Toplevel):
             case 2: tipo = "Wireframe"
             case 3: tipo = "Curva2D"
             case 4: tipo = "BSpline"
+            case 5: tipo = "Objeto3D"
         
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
@@ -223,6 +262,47 @@ class Popup(tk.Toplevel):
         pattern = r'(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)'
         matches = re.findall(pattern, s)
         return matches
+    
+    def _parse_pontos_3D(self, s):
+        s = s.strip()
+        matches = re.findall(r'\(([^)]+)\)', s)
+        coords = []
+        for match in matches:
+            try:
+                valores = [float(v.strip()) for v in match.split(',') if v.strip()]
+                if len(valores) != 3:
+                    raise ValueError("Ponto deve ter 3 coordenadas (x, y, z).")
+                coords.append(tuple(valores))
+            except ValueError:
+                # Se a conversão para float falhar ou o número de coords estiver errado
+                raise ValueError(f"Coordenadas inválidas: '{match}'. Use números válidos.")
+        return coords
+
+    def _parse_arestas(self, s):
+        """
+        Interpreta a string de entrada de arestas no formato: (i, j), (k, l), ...
+        Retorna uma lista de tuplas (índice_ponto1, índice_ponto2).
+        """
+        s = s.strip()
+        
+        # Regex para encontrar tuplas de 2 números (índices)
+        matches = re.findall(r'\(([^)]+)\)', s)
+        
+        arestas = []
+        for match in matches:
+            try:
+                # Separa os valores dentro dos parênteses por vírgula ou espaço
+                indices = [int(v.strip()) for v in match.split(',') if v.strip()]
+                
+                if len(indices) != 2:
+                    raise ValueError("Aresta deve ter 2 índices de pontos (i, j).")
+                
+                arestas.append(tuple(indices))
+            except ValueError:
+                raise ValueError(f"Índices de aresta inválidos: '{match}'. Use inteiros válidos.")
+        
+        return arestas
+
     
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):
