@@ -80,6 +80,58 @@ class Objeto3D:
                 # Desenho final
                 cor = "blue" if self.selecionado else "black"
                 canvas.create_line(x_vp0, y_vp0, x_vp1, y_vp1, fill=cor, width=2)
+    
+    def projetar_perspectiva(self, COP, look_at, d_proj):
+        pontos = [(p.x, p.y, p.z) for p in self.pontos]
+        cx, cy, cz = COP
+        pontos = [(x-cx, y-cy, z-cz) for (x, y, z) in pontos]
+        vpn = (look_at[0]-cx, look_at[1]-cy, look_at[2]-cz)
+        vx, vy, vz = vpn
+        theta = np.arctan2(vx, vz)
+        Ry = np.array([
+            [np.cos(-theta), 0, np.sin(-theta)],
+            [0, 1, 0],
+            [-np.sin(-theta), 0, np.cos(-theta)]
+        ])
+        pontos_rot = [Ry @ np.array([x, y, z]) for x, y, z in pontos]
+        vpn_rot = Ry @ np.array([vx, vy, vz])
+        phi = np.arctan2(vpn_rot[1], vpn_rot[2])
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(phi), -np.sin(phi)],
+            [0, np.sin(phi), np.cos(phi)]
+        ])
+        pontos_final = [Rx @ p for p in pontos_rot]
+        lista_p_proj = []
+        for pt in pontos_final:
+            x, y, z = pt
+            if z <= 0: continue  # evita divisão por zero e pontos atrás do plano
+            x_proj = x * d_proj / z
+            y_proj = y * d_proj / z
+            lista_p_proj.append((x_proj, y_proj))
+        return lista_p_proj
+    def desenhar_perspectiva(self, canvas, viewport, COP, look_at, d_proj, modo_clipping):
+        pontos_proj = self.projetar_perspectiva(COP, look_at, d_proj)
+        # Itera sobre as arestas (conexões entre pontos)
+        for idx_p0, idx_p1 in self.arestas:
+            if idx_p0 >= len(pontos_proj) or idx_p1 >= len(pontos_proj):
+                continue
+            x0, y0 = pontos_proj[idx_p0]
+            x1, y1 = pontos_proj[idx_p1]
+            match modo_clipping:
+                case "Cohen-Sutherland":
+                    check_clipping = clip_reta_CS(x0, y0, x1, y1)
+                case "Nicholl-Lee-Nicholl":
+                    check_clipping = clip_reta_NLN(x0, y0, x1, y1)
+                case _:
+                    check_clipping = (x0, y0, x1, y1)
+            if check_clipping is not None:
+                x0c, y0c, x1c, y1c = check_clipping 
+                # Mapeamento para Viewport (Tela)
+                x_vp0, y_vp0 = viewport.scn_para_viewport(x0c, y0c)
+                x_vp1, y_vp1 = viewport.scn_para_viewport(x1c, y1c)
+                cor = "red" if self.selecionado else "black"
+                canvas.create_line(x_vp0, y_vp0, x_vp1, y_vp1, fill=cor, width=2)
 
 
         

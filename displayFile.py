@@ -24,12 +24,10 @@ class DisplayFile:
         return any(obj.nome == nome for obj in self.objetos)
 
     def adicionar(self, objeto):
-        """Adiciona um objeto, mas verifica se o nome já existe"""
-        if self.nome_existe(objeto.nome):
-            raise ValueError(f"Já existe um objeto com o nome '{objeto.nome}'")
+        """Adiciona um objeto, removendo o anterior se o nome já existe"""
+        self.objetos = [obj for obj in self.objetos if obj.nome != objeto.nome]
         self.objetos.append(objeto)
         self.salvar_em_arquivo()
-
     def remover(self, objeto):
         """Remove um Objeto, pelo nome do objeto ou por objeto em si"""
         if type(objeto) == str:
@@ -123,7 +121,9 @@ class DisplayFile:
             if len(partes) < 4:
                 print(f"[WARN] Objeto3D incompleto na linha: {linha}")
                 return None
-            _, nome, pontos_str_list, arestas_str_list = partes
+            _, nome, *resto = partes
+            pontos_str_list = resto[0]
+            arestas_str_list = resto[1] if len(resto) > 1 else ""
             pontos = []
             p_coords_str = pontos_str_list.split(';')
             for p_str in p_coords_str:
@@ -147,11 +147,6 @@ class DisplayFile:
             else:
                 print(f"[WARN] Objeto3D '{nome}' sem pontos ou arestas válidas.")
                 return None
-
-        else:
-            print(f"[WARN] Tipo de objeto desconhecido: {linha}")
-            return None
-         
     def adicionar_from_obj(self, nome, coords, tipo=None):
         """Adiciona um objeto vindo do importador OBJ"""
         if tipo == "reta" and len(coords) == 2:
@@ -189,4 +184,14 @@ class DisplayFile:
                 for p in obj.pontos:
                     x_view, y_view = window3D.mundo_para_view(p)
                     p.x_scn, p.y_scn = window.mundo_para_scn(x_view, y_view)
+
+    def atualizar_perspectiva(self, window, viewport, COP, look_at, d_proj):
+        for obj in self.objetos:
+            if isinstance(obj, Objeto3D):
+                pontos_proj = obj.projetar_perspectiva(COP, look_at, d_proj)
+                # Atualiza os x_scn/y_scn dos pontos para desenho e clipping
+                for i, p in enumerate(obj.pontos):
+                    if i < len(pontos_proj):
+                        x_proj, y_proj = pontos_proj[i]
+                        p.x_scn, p.y_scn = x_proj, y_proj
 

@@ -127,8 +127,25 @@ class App(Tk):
             value="Nicholl-Lee-Nicholl",
             command=self.redesenhar
         ).pack(anchor="w", padx=10, pady=2)
+        self.cop_x = DoubleVar(value=2)
+        self.cop_y = DoubleVar(value=2)
+        self.cop_z = DoubleVar(value=6)
+        self.d_proj = DoubleVar(value=1)
 
+        ttk.Label(context_menu_frame, text="COP x y z").grid(column=0, row=7)
+        ttk.Entry(context_menu_frame, textvariable=self.cop_x, width=5).grid(column=0, row=8, sticky="w")
+        ttk.Entry(context_menu_frame, textvariable=self.cop_y, width=5).grid(column=0, row=8)
+        ttk.Entry(context_menu_frame, textvariable=self.cop_z, width=5).grid(column=0, row=8, sticky="e")
 
+        ttk.Label(context_menu_frame, text="Plano Projeção d").grid(column=0, row=9)
+        ttk.Entry(context_menu_frame, textvariable=self.d_proj, width=5).grid(column=0, row=10)
+
+        # Botão OK para aplicar valores
+        ttk.Button(context_menu_frame, text="OK (Aplicar COP)", command=self.redesenhar).grid(column=0, row=11, pady=(5, 0))
+        ttk.Button(context_menu_frame, text="COP →", command=lambda: self.cop_x.set(self.cop_x.get()+1)).grid(column=0, row=12, sticky="w")
+        ttk.Button(context_menu_frame, text="COP ←", command=lambda: self.cop_x.set(self.cop_x.get()-1)).grid(column=0, row=13, sticky="w")
+        ttk.Button(context_menu_frame, text="COP ↑", command=lambda: self.cop_y.set(self.cop_y.get()+1)).grid(column=0, row=12, sticky="e")
+        ttk.Button(context_menu_frame, text="COP ↓", command=lambda: self.cop_y.set(self.cop_y.get()-1)).grid(column=0, row=13, sticky="e")
     def _criar_canvas(self):
         self.canvas = Canvas(self, bg="white")
         self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(20, 0))
@@ -138,14 +155,22 @@ class App(Tk):
         transcript_label = Label(self, textvariable=self.text, relief="sunken", anchor="nw", height=4)
         transcript_label.grid(column=1, row=1, sticky="nsew", padx=(0, 10), pady=10)
 
-    def redesenhar(self):
+    def     redesenhar(self):
+        print("Redesenhar chamado! Objetos:", [obj.nome for obj in self.display_file.objetos])
         self.canvas.delete("all")
         self.listbox_objetos.delete(0, END)
 
         self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}")
         self.canvas.create_rectangle(10, 10, self.max_w_viewport, self.max_h_viewport, outline="red")
 
-        self.display_file.atualizar_scn(self.window, self.window3D)
+        # Para os objetos 3D, projeta em perspectiva e atualiza x_scn, y_scn
+        self.display_file.atualizar_perspectiva(
+            self.window,
+            self.viewport,
+            COP=(self.cop_x.get(), self.cop_y.get(), self.cop_z.get()),
+            look_at=(0,0,0),  # ou outro ponto de interesse/foco
+            d_proj=self.d_proj.get()
+        )
         for obj in self.display_file.objetos:
             obj.selecionado = False
 
@@ -153,7 +178,17 @@ class App(Tk):
             self.objeto_selecionado.selecionado = True
 
         for obj in self.display_file.objetos:
-            if obj.__class__.__name__ == "Reta" or obj.__class__.__name__ == "Objeto3D":
+            if obj.__class__.__name__ == "Objeto3D":
+                print("Desenhando objeto 3D:", obj.nome)
+                obj.desenhar_perspectiva(
+                    self.canvas,
+                    self.viewport,
+                    COP=(self.cop_x.get(), self.cop_y.get(), self.cop_z.get()),
+                    look_at=(1,1,0),  # centro do objeto
+                    d_proj=self.d_proj.get(),
+                    modo_clipping=self.metodo_clipping.get()
+                )
+            elif obj.__class__.__name__ == "Reta":
                 obj.desenhar(self.canvas, self.window, self.viewport, self.metodo_clipping.get())
             else:
                 obj.desenhar(self.canvas, self.window, self.viewport)
