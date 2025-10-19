@@ -1,6 +1,7 @@
 import os
 from objetos import *
 from objetos_3d import *
+from superficies3d import SuperficieBezier3D, SuperficieBSpline3D
 
 class DisplayFile:
     def __init__(self, arquivo="objetos.txt"):
@@ -70,9 +71,17 @@ class DisplayFile:
             coords = ";".join([f"{p.x};{p.y}" for p in obj.pontos])
             return f"BSpline;{obj.nome};{coords}"
         elif obj.__class__.__name__ == "Objeto3D":
-            pontos_str = ";".join([f"{p.x},{p.y},{p.z}" for p in obj.pontos])
-            arestas_str = ";".join([f"{i},{j}" for i, j in obj.arestas])
-            return f"Objeto3D;{obj.nome};{pontos_str};{arestas_str}"
+            pontos_str = ";".join([f"{p.x};{p.y};{p.z}" for p in obj.pontos])
+            arestas_str = ";".join([f"{i};{j}" for i, j in obj.arestas])
+            tam_pontos = len(obj.pontos)
+            tam_arestas = len(obj.arestas)
+            return f"Objeto3D;{obj.nome};{tam_pontos};{tam_arestas};{pontos_str};{arestas_str}"
+        elif obj.__class__.__bases__[0].__name__ == "Superficie3D":
+            str_matriz = obj.unpack_matriz()
+            if obj.tipoS == "Bezier":
+                return f"SuperficieBezier3D;{obj.nome};{str_matriz}"
+            else:
+                return f"SuperficieBSpline3D;{obj.nome};{str_matriz}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -119,34 +128,69 @@ class DisplayFile:
                 x, y = coords[i], coords[i+1]
                 pontos.append(Ponto(float(x), float(y), f"{nome}_p{i//2}"))
             return BSpline(pontos, nome)
+
         elif tipo == "Objeto3D":
             if len(partes) < 4:
                 print(f"[WARN] Objeto3D incompleto na linha: {linha}")
                 return None
-            _, nome, pontos_str_list, arestas_str_list = partes
+            _, nome, tam_pontos, tam_arestas = partes[0], partes[1], int(partes[2]) * 3, int(partes[3]) * 2
+            partes = partes[4::]
+            pontos_str_list = list(map(float, partes[:tam_pontos]))
+            arestas_str_list = [int(x) for x in partes[tam_pontos:] if x.strip() != ""]
+
             pontos = []
-            p_coords_str = pontos_str_list.split(';')
-            for p_str in p_coords_str:
-                try:
-                    x, y, z = map(float, p_str.split(','))
-                    pontos.append(Ponto3D(x, y, z))
-                except ValueError:
-                    print(f"[WARN] Ponto 3D inválido em {nome}: {p_str}")
-                    continue
+            for i in range(0, len(pontos_str_list), 3):
+                x, y, z = pontos_str_list[i], pontos_str_list[i+1], pontos_str_list[i+2]
+                pontos.append(Ponto3D(x, y, z))
             arestas = []
-            a_coords_str = arestas_str_list.split(';')
-            for a_str in a_coords_str:
-                try:
-                    i, j = map(int, a_str.split(','))
-                    arestas.append((i, j))
-                except ValueError:
-                    print(f"[WARN] Aresta inválida em {nome}: {a_str}")
-                    continue
+            for i in range(0, len(arestas_str_list), 2):
+                p0 = arestas_str_list[i]
+                p1 = arestas_str_list[i + 1]
+                arestas.append((p0, p1))
             if pontos and arestas:
                 return Objeto3D(pontos, arestas, nome)
             else:
                 print(f"[WARN] Objeto3D '{nome}' sem pontos ou arestas válidas.")
                 return None
+        
+        elif tipo == "SuperficieBezier3D" or tipo == "SuperficieBSpline3D":
+            partes = linha.split(";", 2)
+            _, nome, string_coordenadas = partes[0], partes[1], partes[2]
+            linhas_str = string_coordenadas.split(';')
+            nro_mats = len(linhas_str) // 4
+            lista_matrizes = []
+            for i in range(nro_mats):
+                mat = []
+                bloco_linhas = linhas_str[i*4: (i*4)+4]
+                for linha_str in bloco_linhas:
+                    linha_str = linha_str.strip()
+                    if not linha_str:
+                        continue
+                        
+                    # Divide os pontos da linha
+                    pontos_str = linha_str.split('),')
+                    linha_pontos = []
+                    
+                    for ponto_str in pontos_str:
+                        ponto_str = ponto_str.strip()
+                        # Corrige a formatação se necessário
+                        if ponto_str and not ponto_str.endswith(')'):
+                            ponto_str += ')'
+                        if ponto_str:
+                            # Remove parênteses e divide os valores
+                            coord_str = ponto_str.replace('(', '').replace(')', '')
+                            valores = coord_str.split(',')
+                            
+                            if len(valores) == 3:
+                                x = float(valores[0].strip())
+                                y = float(valores[1].strip())
+                                z = float(valores[2].strip())
+                                linha_pontos.append(Ponto3D(x, y, z))
+                    if linha_pontos:
+                        mat.append(linha_pontos)
+                lista_matrizes.append(mat)
+            return SuperficieBezier3D(lista_matrizes, nome) if tipo == "SuperficieBezier3D" else SuperficieBSpline3D(lista_matrizes, nome)
+            
 
         else:
             print(f"[WARN] Tipo de objeto desconhecido: {linha}")
@@ -187,6 +231,10 @@ class DisplayFile:
                 obj.x_scn, obj.y_scn = window.mundo_para_scn(x_view, y_view)
             elif isinstance(obj, Objeto3D):
                 for p in obj.pontos:
-                    x_view, y_view = window3D.mundo_para_view(p)
-                    p.x_scn, p.y_scn = window.mundo_para_scn(x_view, y_view)
-
+                    x_pp, y_pp, z_pp = window3D.mundo_para_view(p)
+                    p.x_scn, p.y_scn = window.mundo_para_scn(x_pp, y_pp)
+            elif isinstance(obj, SuperficieBezier3D) or isinstance(obj, SuperficieBSpline3D):
+                for linha in obj.p_calculados:
+                    for p in linha:
+                        x_pp, y_pp, z_pp = window3D.mundo_para_view(p)
+                        p.x_scn, p.y_scn = window.mundo_para_scn(x_pp, y_pp)

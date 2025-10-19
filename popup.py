@@ -4,13 +4,15 @@ from objetos import *
 from objetos_3d import *
 from displayFile import DisplayFile
 from tranformacoes import matriz_translacao, matriz_escalonamento, matriz_rotacao, aplicar_matriz, centro_geom
+from transformacao3D import matriz_escalonamento_3d, centro_geom_3d
+from superficies3d import SuperficieBezier3D, SuperficieBSpline3D
 import re
 
 
 class Popup(tk.Toplevel):
     def __init__(self, master, display_file: DisplayFile):
         super().__init__(master)
-        self.geometry("400x500+300+100")
+        self.geometry("500x500+300+100")
         self.title("Incluir Objeto")
         self.aba_atual = 0
         self.display_file = display_file
@@ -99,6 +101,24 @@ class Popup(tk.Toplevel):
         self.arestas_entry.grid(column=1, row=1)
         tk.Label(frame_obj3D, text="Entrada das arestas utiliza o indice dos pontos").grid(column=0, row=2, columnspan=2)
         tk.Label(frame_obj3D, text="Ex: (0, 1), (0, 2), ...").grid(column=0, row=3, columnspan=2)
+        
+        # Aba Superficie3D
+        frame_sprf3D = ttk.Frame(self.notebook)
+        self.notebook.add(frame_sprf3D, text="Superficie3D")
+        tk.Label(frame_sprf3D, text="Pontos de Controle separado em ';' por linha:").grid(column=0, row=0, padx=30)
+        tk.Label(frame_sprf3D, text="ex: (x_11, y_11, z_11), (x_12, y_12, z_12), ...; (x_21, y_21, z_21)").grid(column=0, row=1, padx=30)
+        self.suprf3d_entry = ttk.Entry(frame_sprf3D)
+        self.suprf3d_entry.grid(column=0, row=2, sticky="we", padx=30)
+        self.tipo_sprf3d = tk.StringVar(frame_sprf3D, value="Bezier")
+        opcoes = ["Bezier", "B-Spline"]
+        self.dropdown = ttk.OptionMenu(
+            frame_sprf3D,
+            self.tipo_sprf3d,
+            "Bezier",
+            *opcoes,
+        )
+        self.dropdown.grid(pady=10) 
+
 
         # Botões
         btn_frame = tk.Frame(self)
@@ -206,6 +226,24 @@ class Popup(tk.Toplevel):
                     
                     obj3d = Objeto3D(pontos, arestas, nome)
                     self.display_file.adicionar(obj3d)
+                
+                case 6: # Superficie3d
+                    s_matriz_pontos = self._parse_matriz(self.suprf3d_entry.get())
+                    tipo_sprf = self.tipo_sprf3d.get().capitalize()
+                    matriz_pontos = []
+                    for linha in s_matriz_pontos:
+                        linha_pontos = []
+                        for ponto in linha:
+                            x, y, z = ponto
+                            linha_pontos.append(Ponto3D(x,y,z)) 
+                        matriz_pontos.append(linha_pontos)
+                        
+                    if tipo_sprf == "Bezier":
+                        sprf_3d = SuperficieBezier3D(matriz_pontos, nome)
+                    else:
+                        sprf_3d = SuperficieBSpline3D(matriz_pontos, nome)
+                    self.display_file.adicionar(sprf_3d)
+                    
 
             self.destroy()
         except ValueError as e:
@@ -239,6 +277,7 @@ class Popup(tk.Toplevel):
     def gerar_nome_gen(self):
         """Gera um nome generico baseado no tipo e quantidade"""
         tipo = ""
+        tipoS = None
         match self.aba_atual:
             case 0: tipo = "Ponto"
             case 1: tipo = "Reta"
@@ -246,10 +285,11 @@ class Popup(tk.Toplevel):
             case 3: tipo = "Curva2D"
             case 4: tipo = "BSpline"
             case 5: tipo = "Objeto3D"
+            case 6: tipo = "Superficie3D"; tipoS = self.tipo_sprf3d.get()
         
         # Conta quantos objetos deste tipo já existem
         count = sum(1 for obj in self.display_file.objetos if obj.nome.startswith(tipo))
-        return f"{tipo}_{count + 1}"
+        return f"{tipo}_{count + 1}" if tipoS is None else f"{tipoS}_{count + 1}" 
     
     def escolher_cor(self):
         """Abre o color picker e atualiza a cor de preenchimento"""
@@ -302,14 +342,35 @@ class Popup(tk.Toplevel):
                 raise ValueError(f"Índices de aresta inválidos: '{match}'. Use inteiros válidos.")
         
         return arestas
-
     
+    def _parse_matriz(self, s):
+        matriz = []
+        # Divide em linhas
+        linhas = s.split(';')
+        for linha in linhas:
+            # Encontra todas as tuplas na linha
+            tuplas = re.findall(r'\([^)]+\)', linha)
+            linha_coordenadas = []
+            for tupla in tuplas:
+                # Extrai os números da tupla
+                numeros = re.findall(r'[-+]?\d*\.\d+|\d+', tupla)
+                if len(numeros) == 3:
+                    x, y, z = map(float, numeros)
+                    linha_coordenadas.append((x, y, z))
+            
+            if linha_coordenadas:
+                matriz.append(linha_coordenadas)
+        
+        return matriz
+    
+
 class PopupTransformacoes(tk.Toplevel):
     def __init__(self, parent, objeto, callback_redesenhar):
         super().__init__(parent)
         self.title(f"Transformações: {objeto.nome}")
         self.geometry("500x300")
         self.objeto = objeto
+        self.is_3d = objeto.__class__.__name__ == 'Objeto3D'
         self.callback_redesenhar = callback_redesenhar
 
         # Tipo da transformação
@@ -331,6 +392,13 @@ class PopupTransformacoes(tk.Toplevel):
         self.label_y.grid(column=0, row=2, sticky="w", padx=5, pady=5)
         self.entry_y = ttk.Entry(self, width=10)
         self.entry_y.grid(column=1, row=2, padx=5, pady=5)
+        
+        if self.is_3d:
+            self.label_z = ttk.Label(self, text="dz:")
+            self.label_z.grid(column=0, row=3, sticky="w", padx=5, pady=5)
+            self.entry_z = ttk.Entry(self, width=10)
+            self.entry_z.grid(column=1, row=3, padx=5, pady=5)
+            
 
         self.label_angulo = ttk.Label(self, text="Ângulo (graus):")
         self.label_angulo.grid(column=0, row=3, sticky="w", padx=5, pady=5)
@@ -347,6 +415,13 @@ class PopupTransformacoes(tk.Toplevel):
         self.label_cy.grid(column=0, row=5, sticky="w", padx=5, pady=5)
         self.entry_cy = ttk.Entry(self, width=10)
         self.entry_cy.grid(column=1, row=5, padx=5, pady=5)
+        
+        if self.is_3d:
+            self.label_cz = ttk.Label(self, text="Centro Z (Arbitrário):")
+            self.label_cz.grid(column=0, row=6, sticky="w", padx=5, pady=5)
+            self.entry_cz = ttk.Entry(self, width=10)
+            self.entry_cz.grid(column=1, row=6, padx=5, pady=5)
+            
 
         # Centro de rotação (aparece só em Rotação)
         self.label_radio = ttk.Label(self, text="Centro da Rotação:")
@@ -354,9 +429,16 @@ class PopupTransformacoes(tk.Toplevel):
         self.radio_objeto = ttk.Radiobutton(self, text="Objeto", variable=self.centro_rotacao_var, value="objeto")
         self.radio_mundo = ttk.Radiobutton(self, text="Mundo", variable=self.centro_rotacao_var, value="mundo")
         self.radio_arbitrario = ttk.Radiobutton(self, text="Arbitrário", variable=self.centro_rotacao_var, value="arbitrario")
+        if self.is_3d:
+            self.eixo_var = tk.StringVar(value="x")
+            self.eixo_rotacao_label = ttk.Label(self, text="Eixo de rotação: ")
+            self.eixo_frame = ttk.Frame(self)
+            self.radio_eixo_x = ttk.Radiobutton(self.eixo_frame, text="X", variable=self.eixo_var, value="x")
+            self.radio_eixo_y = ttk.Radiobutton(self.eixo_frame, text="Y", variable=self.eixo_var, value="y")
+            self.radio_eixo_z= ttk.Radiobutton(self.eixo_frame, text="Z", variable=self.eixo_var, value="z")
 
         # Botão aplicar
-        ttk.Button(self, text="Aplicar transformação", command=self.aplicar).grid(column=0, row=7, columnspan=4, pady=10)
+        ttk.Button(self, text="Aplicar transformação", command=self.aplicar).grid(column=0, row=9, columnspan=4, pady=10)
 
         # Ajusta inputs dinamicamente
         self.combo_tipo.bind("<<ComboboxSelected>>", self._atualizar_inputs)
@@ -370,6 +452,16 @@ class PopupTransformacoes(tk.Toplevel):
             self.label_y.config(text="dy:")
             self.label_x.grid(); self.entry_x.grid()
             self.label_y.grid(); self.entry_y.grid()
+            if self.is_3d:
+                self.label_z.config(text="dz:")
+                self.label_z.grid(); self.entry_z.grid()
+                self.label_cz.grid_remove(); self.entry_cz.grid_remove()
+                self.eixo_rotacao_label.grid_remove()
+                self.radio_eixo_x.grid_remove()
+                self.radio_eixo_y.grid_remove()
+                self.radio_eixo_z.grid_remove()
+                self.eixo_frame.grid_remove()
+
 
             # Esconde ângulo e centro
             self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
@@ -385,7 +477,15 @@ class PopupTransformacoes(tk.Toplevel):
             self.label_y.config(text="sy:")
             self.label_x.grid(); self.entry_x.grid()
             self.label_y.grid(); self.entry_y.grid()
-
+            if self.is_3d:
+                self.label_z.config(text="sz:")
+                self.label_z.grid(); self.entry_z.grid()
+                self.label_cz.grid_remove(); self.entry_cz.grid_remove()
+                self.eixo_rotacao_label.grid_remove()
+                self.radio_eixo_x.grid_remove()
+                self.radio_eixo_y.grid_remove()
+                self.radio_eixo_z.grid_remove()
+                self.eixo_frame.grid_remove()
             # Esconde ângulo e centro
             self.label_angulo.grid_remove(); self.entry_angulo.grid_remove()
             self.label_cx.grid_remove(); self.entry_cx.grid_remove()
@@ -402,47 +502,90 @@ class PopupTransformacoes(tk.Toplevel):
             self.label_angulo.grid(); self.entry_angulo.grid()
             self.label_cx.grid(); self.entry_cx.grid()
             self.label_cy.grid(); self.entry_cy.grid()
-
-            self.label_radio.grid(column=0, row=6, sticky="w", padx=5, pady=5)
-            self.radio_objeto.grid(column=1, row=6, sticky="w")
-            self.radio_mundo.grid(column=2, row=6, sticky="w")
-            self.radio_arbitrario.grid(column=3, row=6, sticky="w")
+            if self.is_3d:
+                self.label_cz.grid(); self.entry_cz.grid()
+                self.eixo_rotacao_label.grid(column=0, row=8, sticky="w", padx=5, pady=5)
+                self.eixo_frame.grid(column=1, row=8)
+                self.radio_eixo_x.grid(column=1, row=0, sticky="w", padx=5, pady=5)
+                self.radio_eixo_y.grid(column=2, row=0, sticky="w", padx=5, pady=5)
+                self.radio_eixo_z.grid(column=3, row=0, sticky="w", padx=5, pady=5)
+                self.label_radio.grid(column=0, row=7, sticky="w", padx=5, pady=5)
+                self.radio_objeto.grid(column=1, row=7, sticky="w")
+                self.radio_mundo.grid(column=2, row=7, sticky="w")
+                self.radio_arbitrario.grid(column=3, row=7, sticky="w")
+            else:
+                self.label_radio.grid(column=0, row=6, sticky="w", padx=5, pady=5)
+                self.radio_objeto.grid(column=1, row=6, sticky="w")
+                self.radio_mundo.grid(column=2, row=6, sticky="w")
+                self.radio_arbitrario.grid(column=3, row=6, sticky="w")
 
     def aplicar(self):
         tipo = self.combo_tipo.get()
         obj = self.objeto
+        tipo3d = self.is_3d
 
         if tipo == "Translação":
             dx = float(self.entry_x.get() or 0)
             dy = float(self.entry_y.get() or 0)
-            matriz = matriz_translacao(dx, dy)
-            aplicar_matriz(obj, matriz)
+            if not tipo3d:
+                matriz = matriz_translacao(dx, dy)
+                aplicar_matriz(obj, matriz)
+            else:
+                dz = float(self.entry_z.get() or 0)
+                obj.transladar(dx, dy, dz)
 
         elif tipo == "Escala":
             sx = float(self.entry_x.get() or 1)
             sy = float(self.entry_y.get() or 1)
-            cx, cy = centro_geom(obj)
-            matriz = matriz_escalonamento(sx, sy, cx, cy)
-            aplicar_matriz(obj, matriz)
+            if not tipo3d:
+                cx, cy = centro_geom(obj)
+                matriz = matriz_escalonamento(sx, sy, cx, cy)
+                aplicar_matriz(obj, matriz)
+            else:
+                sz = float(self.entry_z.get() or 1)
+                cx, cy, cz = centro_geom_3d(obj)
+                matriz = matriz_escalonamento_3d(sx, sy, sz, cx, cy, cz)
+                obj.aplicar_matriz(matriz)
 
         elif tipo == "Rotação":
             angulo = float(self.entry_angulo.get() or 0)
             centro_tipo = self.centro_rotacao_var.get()
-
+            if tipo3d:
+                eixo = self.eixo_var.get()
             if centro_tipo == "objeto":
-                cx, cy = centro_geom(obj)
-                matriz = matriz_rotacao(angulo, cx, cy)
+                if tipo3d:
+                    obj.rotacionar_em_torno_objeto(eixo, angulo)
+                else:
+                    cx, cy = centro_geom(obj)
+                    matriz = matriz_rotacao(angulo, cx, cy)
+
             elif centro_tipo == "mundo":
-                matriz = matriz_rotacao(angulo, 0, 0)
+                if tipo3d:
+                    if eixo == "x":
+                        obj.rotacionar_x(angulo)
+                    if eixo == "y":
+                        obj.rotacionar_y(angulo)
+                    if eixo == "z":
+                        obj.rotacionar_z(angulo)
+                else:
+                    matriz = matriz_rotacao(angulo, 0, 0)
+
             elif centro_tipo == "arbitrario":
-                cx = float(self.entry_cx.get() or 0)
-                cy = float(self.entry_cy.get() or 0)
-                matriz = (
-                    matriz_translacao(cx, cy) @
-                    matriz_rotacao(angulo, 0, 0) @
-                    matriz_translacao(-cx, -cy)
-                )
-            aplicar_matriz(obj, matriz)
+                if tipo3d:
+                    cx = float(self.entry_cx.get() or 0)
+                    cy = float(self.entry_cy.get() or 0)
+                    cz = float(self.entry_cz.get() or 0)
+                    obj.rotacionar_em_torno_ponto(eixo, angulo, cx, cy, cz)
+                else:
+                    cx = float(self.entry_cx.get() or 0)
+                    cy = float(self.entry_cy.get() or 0)
+                    matriz = (
+                        matriz_translacao(cx, cy) @
+                        matriz_rotacao(angulo, 0, 0) @
+                        matriz_translacao(-cx, -cy)
+                    )
+            if not tipo3d:
+                aplicar_matriz(obj, matriz)
 
         self.callback_redesenhar()
         self.destroy()

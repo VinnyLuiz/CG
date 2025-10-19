@@ -35,7 +35,7 @@ class Objeto3D:
 
     # Operações básicas
     def transladar(self, dx, dy, dz):
-        self.aplicar_matriz(matriz_translacao_3d(dx, dy, dz))
+        self.aplicar_matriz(matriz_translacao_3d(-dx, -dy, -dz))
 
     def escalar(self, sx, sy, sz, cx=0, cy=0, cz=0):
         self.aplicar_matriz(matriz_escalonamento_3d(sx, sy, sz, cx, cy, cz))
@@ -52,15 +52,34 @@ class Objeto3D:
     def rotacionar_arbitrario(self, p1, p2, angulo):
         self.aplicar_matriz(matriz_rotacao_arbitraria(p1, p2, angulo))
         
-    # Projeção
-    def projetar(self, window3D):
-        lista_p_proj = []
-        for p in self.pontos:
-            p_view = window3D.mundo_para_view(p)
-            p_proj = proj_ortogonal(p_view)
-            lista_p_proj.append((p_proj[0], p_proj[1]))
-        return lista_p_proj
-    
+    def rotacionar_em_torno_objeto(self, eixo, angulo):
+        cx, cy, cz = centro_geom_3d(self)
+        
+        if eixo == 'x':
+            R = matriz_rotacao_x(angulo)
+        elif eixo == 'y':
+            R = matriz_rotacao_y(angulo)
+        elif eixo == 'z':
+            R = matriz_rotacao_z(angulo)
+        else:
+            raise ValueError("Eixo inválido, use 'x', 'y' ou 'z'")
+
+        M = matriz_translacao_3d(cx, cy, cz) @ R @ matriz_translacao_3d(-cx, -cy, -cz)
+        self.aplicar_matriz(M)
+
+    def rotacionar_em_torno_ponto(self, eixo, angulo, px, py, pz):
+        if eixo == 'x':
+            R = matriz_rotacao_x(angulo)
+        elif eixo == 'y':
+            R = matriz_rotacao_y(angulo)
+        elif eixo == 'z':
+            R = matriz_rotacao_z(angulo)
+        else:
+            raise ValueError("Eixo inválido")
+
+        M = matriz_translacao_3d(px, py, pz) @ R @ matriz_translacao_3d(-px, -py, -pz)
+        self.aplicar_matriz(M)
+
     def desenhar(self, canvas, window, viewport, modo_clipping):
         # Itera sobre as arestas (conexões entre pontos)
         for idx_p0, idx_p1 in self.arestas:

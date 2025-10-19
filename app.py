@@ -40,19 +40,18 @@ class App(Tk):
         self.viewport = Viewport(10, 10, self.max_w_viewport, self.max_h_viewport)
         
         # View Reference Point
-        VRP_inicial = [0, 0, 0] 
+        VRP_inicial = [0, 0, 200] 
         # View Plane Normal
         VPN_inicial = [0, 0, -1] 
         # View Up Vector
         VUP_inicial = [0, 1, 0] 
         self.window3D = Window3D(VRP_inicial, VPN_inicial, VUP_inicial) 
-
         self.redesenhar()
 
     # Criação do Layout
     def _criar_menu_contexto(self):
-        context_menu_frame = ttk.LabelFrame(self, text="Menu de ações", padding=20)
-        context_menu_frame.grid(column=0, row=0, rowspan=2, padx=10, pady=10, sticky="ns")
+        context_menu_frame = ttk.LabelFrame(self, text="Menu de ações", padding=10)
+        context_menu_frame.grid(column=0, row=0, rowspan=2, padx=10, pady=5, sticky="ns")
 
         # Lista de objetos
         ttk.Label(context_menu_frame, text="Objetos").grid(column=0, row=0)
@@ -79,17 +78,19 @@ class App(Tk):
         labelFrame_window.grid(column=0, row=3)
 
         self.entry_passo = ttk.Entry(labelFrame_window, background="white", width=5)
-        self.entry_passo.grid(column=1, row=0, padx=(0, 5), pady=10)
+        self.entry_passo.grid(column=1, row=0, padx=(0, 5))
 
         self.entry_angulo_window = ttk.Entry(labelFrame_window, background="white", width=5)
-        self.entry_angulo_window.grid(column=1, row=1, padx=(0, 5), pady=10)
+        self.entry_angulo_window.grid(column=1, row=1, padx=(0, 5), pady=5)
 
         ttk.Label(labelFrame_window, text="Passo:").grid(column=0, row=0, padx=10)
         ttk.Label(labelFrame_window, text="Ângulo:").grid(column=0, row=1, padx=10)
         
         # Frame de arquivo
-        ttk.Button(context_menu_frame, text="Salvar Arquivo", width=15, command=self.exportar_obj).grid(column=0, row=5, pady=5)
-        ttk.Button(context_menu_frame, text="Carregar Arquivo", width=15, command=self.importar_obj).grid(column=0, row=6)
+        frame_arquivos = ttk.Frame(context_menu_frame)
+        ttk.Button(frame_arquivos, text="Salvar Arquivo", width=15, command=self.exportar_obj).grid(column=0, row=0, pady=5)
+        ttk.Button(frame_arquivos, text="Carregar Arquivo", width=15, command=self.importar_obj).grid(column=1, row=0)
+        frame_arquivos.grid(row=7)
 
         # Botões de Movimento
         frame_botoes_movimento = ttk.Frame(labelFrame_window)
@@ -107,10 +108,13 @@ class App(Tk):
         ttk.Button(frame_botoes_zoom, text="+", width=2, command=self.zoom_in).grid(column=0, row=0, padx=(0, 5), pady=5)
         ttk.Button(frame_botoes_zoom, text="-", width=2, command=self.zoom_out).grid(column=0, row=1, padx=(0, 5), pady=5)
 
+        # Frame Auxiliar para clipping e projecao
+        frame_aux = ttk.Frame(context_menu_frame)
+        frame_aux.grid(row=4, padx=5, pady=5)
         # RadioButton Clipping
         self.metodo_clipping = StringVar(value="Cohen-Sutherland")
-        frame_clipping = ttk.LabelFrame(context_menu_frame, text="Clipping de Retas")
-        frame_clipping.grid(row=4, padx=5, pady=5)
+        frame_clipping = ttk.LabelFrame(frame_aux, text="Clipping de Retas")
+        frame_clipping.grid(row=0, column=0, padx=5)
 
         ttk.Radiobutton(
             frame_clipping,
@@ -127,11 +131,58 @@ class App(Tk):
             value="Nicholl-Lee-Nicholl",
             command=self.redesenhar
         ).pack(anchor="w", padx=10, pady=2)
+        
+        # RadioButton Projecao
+        self.tipo_proj = StringVar(value="Paralela")
+        self.distancia_proj = IntVar(value=100)
+        frame_proj = ttk.LabelFrame(frame_aux, text="Tipo de Projeção")
+        frame_proj.grid(row=0, column=1, sticky="ns")
+        self.label_distancia = ttk.Label(frame_proj, text="Distância: 0")
+        self.slider_distancia = ttk.Scale(frame_proj, from_=100, to=500, orient=HORIZONTAL, command=self.atualizar_distancia_camera)
+
+        ttk.Radiobutton(
+            frame_proj,
+            text="Paralela",
+            variable=self.tipo_proj,
+            value="Paralela",
+            command=self.mudar_projecao
+        ).grid(row=0, padx=10, sticky="ew")
+
+        ttk.Radiobutton(
+            frame_proj,
+            text="Perspectiva",
+            variable=self.tipo_proj,
+            value="Perspectiva",
+            command=self.mudar_projecao
+        ).grid(row=1, padx=10, sticky="ew")
+        
+        # Controle COP
+        self.x_cop = DoubleVar(value=0)
+        self.y_cop = DoubleVar(value=0)
+        self.z_cop = DoubleVar(value=0)
+        
+        ttk.Label(frame_proj, text="COP").grid(row=5)
+        inner_frame_proj = ttk.Frame(frame_proj)
+        inner_frame_proj.grid(row=5)
+        label_xcop = ttk.Label(inner_frame_proj, text="X:")
+        label_ycop = ttk.Label(inner_frame_proj, text="Y:")
+        label_zcop = ttk.Label(inner_frame_proj, text="Z:")
+        self.entry_xcop = ttk.Entry(inner_frame_proj, width=3)
+        self.entry_ycop = ttk.Entry(inner_frame_proj, width=3)
+        self.entry_zcop = ttk.Entry(inner_frame_proj, width=3)
+        label_xcop.grid(row=0, column=0)
+        label_ycop.grid(row=0, column=2)
+        label_zcop.grid(row=0, column=4)
+        self.entry_xcop.grid(row=0, column=1, pady=(0, 2))
+        self.entry_ycop.grid(row=0, column=3, pady=(0, 2))
+        self.entry_zcop.grid(row=0, column=5, pady=(0, 2))
+        ttk.Button(frame_proj, text="Atualizar COP", command=self.atualizar_COP).grid(row=6, padx=3, pady=5)
+
 
 
     def _criar_canvas(self):
         self.canvas = Canvas(self, bg="white")
-        self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(20, 0))
+        self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(15, 0))
 
     def _criar_status_bar(self):
         self.text = StringVar()
@@ -142,7 +193,7 @@ class App(Tk):
         self.canvas.delete("all")
         self.listbox_objetos.delete(0, END)
 
-        self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}")
+        self.text.set(f"Dimensão do Viewport: {self.max_w_viewport}x{self.max_h_viewport}\n{self.display_file.objetos}")
         self.canvas.create_rectangle(10, 10, self.max_w_viewport, self.max_h_viewport, outline="red")
 
         self.display_file.atualizar_scn(self.window, self.window3D)
@@ -153,7 +204,7 @@ class App(Tk):
             self.objeto_selecionado.selecionado = True
 
         for obj in self.display_file.objetos:
-            if obj.__class__.__name__ == "Reta" or obj.__class__.__name__ == "Objeto3D":
+            if obj.__class__.__name__ == "Reta" or obj.__class__.__name__ == "Objeto3D" or obj.__class__.__bases__[0].__name__ == "Superficie3D":
                 obj.desenhar(self.canvas, self.window, self.viewport, self.metodo_clipping.get())
             else:
                 obj.desenhar(self.canvas, self.window, self.viewport)
@@ -305,8 +356,39 @@ class App(Tk):
             f"Arquivo OBJ exportado com sucesso!\nCaminho: {caminho}")
         
     def abrir_popup_transformacoes(self):
-            selecao = self.listbox_objetos.curselection()
+        selecao = self.listbox_objetos.curselection()
     
+    def mudar_projecao(self):
+        tipo = self.tipo_proj.get().lower()
+        if tipo == "perspectiva":
+            self.label_distancia.grid(row=2, columnspan=2)
+            self.slider_distancia.grid(row=3, columnspan=2, pady=(0, 5))
+        else:
+            self.label_distancia.grid_remove()
+            self.slider_distancia.grid_remove()
+        self.window3D.mudar_projecao(tipo)
+        self.redesenhar()
+        
+    def atualizar_distancia_camera(self, valor):
+        try:
+            distancia = float(valor)
+            self.window3D.distancia = distancia
+            self.label_distancia.config(text=f"Distância: {distancia:.0f}")
+            self.redesenhar()
+        except Exception:
+            pass
+    
+    def atualizar_COP(self):
+        x = float(self.entry_xcop.get()) if self.entry_xcop.get() != "" else 0.0
+        y = float(self.entry_ycop.get()) if self.entry_ycop.get() != "" else 0.0
+        z = float(self.entry_zcop.get()) if self.entry_zcop.get() != "" else 0.0
+        self.window3D.COP[0] = x
+        self.window3D.COP[1] = y
+        self.window3D.COP[2] = z
+        self.redesenhar()
+
+
+
 
 
 if __name__ == "__main__":

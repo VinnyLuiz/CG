@@ -7,6 +7,12 @@ class Window3D:
         self.vrp = np.array(vrp, dtype=float)
         self.vpn = np.array(vpn, dtype=float)
         self.vup = np.array(vup, dtype=float)
+        self.tipo_proj = "paralela"
+        self.distancia = 100
+        self.COP = np.array([0, 0, 0], dtype=float)
+
+    def mudar_projecao(self, perspectiva: str):
+        self.tipo_proj = perspectiva.lower()
 
     def atualizar_mat_view(self):
         # 1. Leva para a origem
@@ -29,24 +35,92 @@ class Window3D:
         
         return R @ T
 
-    def mundo_para_view(self, p):
-        M = self.atualizar_mat_view()
-        P = np.array([p.x, p.y, p.z, 1])
-        p_view = M @ P
-        return p_view[0], p_view[1]
 
+    def aplicar_projecao(self, p_view):
+        """
+        Aplica a matriz de projeção 3D (Perspectiva ou Paralela).
+        p_view é o ponto já transformado para SCV: (xv, yv, zv, 1).
+        Retorna o ponto homogêneo transformado (x', y', z', h).
+        """
+        if self.tipo_proj == "perspectiva":
+            # 1. Aplica M_PROJ
+            M_PROJ = matriz_projecao_perspectiva(self.distancia)
+            p_proj = M_PROJ @ p_view
+            
+            # 2. Divisão em Perspectiva (Dehomogeneização)
+            # O quarto elemento (w ou h) é p_proj[3].
+            h = p_proj[3]
+            if abs(h) < 1e-6: # Evita divisão por zero (ponto no COP)
+                h = 1.0 
+
+            # Transforma (x', y', z', h) para (x_pp, y_pp, z_pp, 1)
+            x_pp = p_proj[0] / h
+            y_pp = p_proj[1] / h
+            # O z_pp é usado para Z-Buffer/Clipping de profundidade
+            z_pp = p_proj[2] / h
+            
+            return x_pp, y_pp, z_pp
+            
+        else: # Projeção Paralela (Ortogonal)
+            # No SCV, a projeção já é dada por X e Y (descartando Z)
+            return p_view[0], p_view[1], p_view[2]
+
+
+    def mundo_para_view(self, p):
+        M_VIEW = self.atualizar_mat_view()
+        P_SCM_hom = np.array([p.x, p.y, p.z, 1])
+        P_SCV_hom = M_VIEW @ P_SCM_hom
+        
+        x_v, y_v, z_v = P_SCV_hom[0], P_SCV_hom[1], P_SCV_hom[2]
+        
+        if self.tipo_proj == "perspectiva":
+            cx, cy, cz = self.COP
+            
+            M_T_COP = matriz_translacao_3d(-cx, -cy, -cz)
+            P_SCV_CENTRO_COP = M_T_COP @ P_SCV_hom
+            
+            M_PROJ = matriz_projecao_perspectiva(self.distancia)
+            P_PROJ_hom = M_PROJ @ P_SCV_CENTRO_COP
+            
+            h = P_PROJ_hom[3]
+            
+            if h <= 1e-6:
+                return 99999, 99999, z_v 
+
+            x_pp_centro = P_PROJ_hom[0] / h
+            y_pp_centro = P_PROJ_hom[1] / h
+            
+            x_pp = x_pp_centro + cx
+            y_pp = y_pp_centro + cy
+            
+            return x_pp, y_pp, z_v
+            
+        return x_v, y_v, z_v
+
+
+
+# Projeção
 def proj_ortogonal(pov):
     x, y, z = pov
     return np.array([x, y, 0])
+
+def matriz_projecao_perspectiva(d):
+    """Cria a matriz de projeção em perspectiva com distância d do plano de projeção."""
+    return np.array([
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1/d, 0]
+    ], dtype=float)
 
 # Matrizes
 def matriz_translacao_3d(dx, dy, dz):
     """Cria uma matriz de translação 3D."""
     return np.array([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [dx, dy, dz, 1]
+        [1, 0, 0, dx],
+        [0, 1, 0, dy],
+        [0, 0, 1, dz],
+        [0, 0, 0, 1]
     ], dtype=float)
 
 def matriz_escalonamento_3d(sx, sy, sz, cx=0, cy=0, cz=0):
@@ -118,3 +192,13 @@ def matriz_rotacao_arbitraria(p1, p2, angulo):
         T1
     )
     return M
+
+def centro_geom_3d(objeto):
+    n = len(objeto.pontos)
+    if n == 0:
+        return (0, 0, 0)
+    cx = sum(p.x for p in objeto.pontos) / n
+    cy = sum(p.y for p in objeto.pontos) / n
+    cz = sum(p.z for p in objeto.pontos) / n
+    return (cx, cy, cz)
+
