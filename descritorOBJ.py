@@ -1,5 +1,5 @@
 import os
-from objetos_3d import Objeto3D, Ponto3D
+from objetos_3d import Objeto3D, Ponto3D, SuperficieBezier
 
 class DescritorOBJ:
     def exportar(display_file, nome_arquivo="mundo.obj"):
@@ -30,45 +30,126 @@ class DescritorOBJ:
                         f.write("l " + " ".join(map(str, idxs)) + f" {idxs[0]}\n")
         return os.path.abspath(nome_arquivo)
     
+    @staticmethod
     def importar(display_file, nome_arquivo="mundo.obj"):
-        # Remove só os Objeto3D para não apagar os 2D (opcional)
-        display_file.objetos = [obj for obj in display_file.objetos if obj.__class__.__name__ != "Objeto3D"]
+        display_file.objetos = [obj for obj in display_file.objetos
+                                if obj.__class__.__name__ not in ("Objeto3D", "SuperficieBezier")]
 
-        vertices_globais = []
-        arestas = []
-        nome = None
+        objects = []
+        current = {"name": None, "vertices": [], "arestas": []}
+        objects.append(current)
 
-        with open(nome_arquivo) as f:
-            for line in f:
-                if line.startswith("o "):
-                    # Salva o objeto anterior se houver
-                    if vertices_globais and arestas:
-                        pontos = [Ponto3D(*v) for v in vertices_globais]
-                        obj3d = Objeto3D(pontos, arestas, nome)
-                        display_file.adicionar(obj3d)
-                        print(f"[OBJ] Importado Objeto3D: {nome} ({len(pontos)} pontos, {len(arestas)} arestas)")
-                    # Começa novo objeto
-                    nome = line.strip().split(maxsplit=1)[1]
-                    vertices_globais = []
-                    arestas = []
-                elif line.startswith("v "):
-                    try:
-                        _, x, y, z = line.strip().split()
-                        vertices_globais.append((float(x), float(y), float(z)))
-                    except Exception as e:
-                        print(f"[OBJ] Erro ao ler vértice: {line.strip()} - {e}")
-                elif line.startswith("l "):
-                    try:
-                        idxs = [int(i)-1 for i in line.strip().split()[1:]]
-                        for i in range(len(idxs)-1):
-                            arestas.append((idxs[i], idxs[i+1]))
-                    except Exception as e:
-                        print(f"[OBJ] Erro ao ler aresta: {line.strip()} - {e}")
-            # Salva o último objeto do arquivo
-            if vertices_globais and arestas:
-                pontos = [Ponto3D(*v) for v in vertices_globais]
-                obj3d = Objeto3D(pontos, arestas, nome)
-                display_file.adicionar(obj3d)
-                print(f"[OBJ] Importado Objeto3D: {nome} ({len(pontos)} pontos, {len(arestas)} arestas)")
-        print(f"[OBJ] Total de objetos 3D importados: {len([o for o in display_file.objetos if o.__class__.__name__ == 'Objeto3D'])}")
+        try:
+            with open(nome_arquivo, "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("o ") or line.startswith("g "):
+                        name = line.split(maxsplit=1)[1].strip()
+                        current = {"name": name, "vertices": [], "arestas": []}
+                        objects.append(current)
+                    elif line.startswith("v "):
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            x, y, z = parts[1], parts[2], parts[3]
+                        elif len(parts) == 3:
+                            x, y = parts[1], parts[2]
+                            z = "0"
+                        else:
+                            print(f"[OBJ] vértice inválido ignorado: {line}")
+                            continue
+                        try:
+                            current["vertices"].append((float(x), float(y), float(z)))
+                        except Exception as e:
+                            print(f"[OBJ] falha ao parsear vértice '{line}': {e}")
+                    elif line.startswith("l "):
+                        parts = line.split()[1:]
+                        try:
+                            idxs = [int(p) - 1 for p in parts]
+                            for i in range(len(idxs) - 1):
+                                current["arestas"].append((idxs[i], idxs[i+1]))
+                        except Exception as e:
+                            print(f"[OBJ] falha ao ler linha (l): {line} -> {e}")
+                    elif line.startswith("f "):
+                        parts = line.split()[1:]
+                        try:
+                            idxs = [int(p.split("/")[0]) - 1 for p in parts]
+                            for i in range(len(idxs)):
+                                current["arestas"].append((idxs[i], idxs[(i+1) % len(idxs)]))
+                        except Exception as e:
+                            print(f"[OBJ] falha ao ler face (f): {line} -> {e}")
+                    else:
+                        continue
+        except FileNotFoundError:
+            raise
+
+        def garantir_nome_unico(base_nome):
+            if not base_nome:
+                base_nome = "importado"
+            nome_final = base_nome
+            k = 1
+            nomes_existentes = {obj.nome for obj in display_file.objetos}
+            while nome_final in nomes_existentes:
+                nome_final = f"{base_nome}_{k}"
+                k += 1
+            return nome_final
+
+        objetos_criados = 0
+
+        for blk in objects:
+            n_vertices = len(blk["vertices"])
+            n_arestas = len(blk["arestas"])
+            nome_bloco = blk["name"] or "importado"
+            # se tem arestas e vértices suficientes -> Objeto3D
+            if n_arestas > 0 and n_vertices > 0:
+                pts = [Ponto3D(*v) for v in blk["vertices"]]
+                nome = garantir_nome_unico(nome_bloco)
+                obj3d = Objeto3D(pts, blk["arestas"], nome)
+                try:
+                    display_file.adicionar(obj3d)
+                    print(f"[OBJ] Importado Objeto3D: {nome} ({len(pts)} pts, {len(blk['arestas'])} arestas)")
+                    objetos_criados += 1
+                except Exception as e:
+                    print(f"[OBJ] erro ao adicionar Objeto3D {nome}: {e}")
+            # se não tem arestas mas tem vértices múltiplos de 16 -> SuperficieBezier
+            elif n_arestas == 0 and n_vertices >= 16 and (n_vertices % 16) == 0:
+                patches = []
+                for i in range(0, n_vertices, 16):
+                    block = blk["vertices"][i:i+16]
+                    patches.append([Ponto3D(*v) for v in block])
+                nome = garantir_nome_unico(nome_bloco)
+                try:
+                    surf = SuperficieBezier(patches, nome)
+                    display_file.adicionar(surf)
+                    print(f"[OBJ] Importado SuperficieBezier: {nome} ({len(patches)} patches)")
+                    objetos_criados += 1
+                except Exception as e:
+                    print(f"[OBJ] erro ao adicionar SuperficieBezier {nome}: {e}")
+            # blocos pequenos ou inválidos
+            elif n_vertices > 0:
+                print(f"[OBJ] Bloco '{nome_bloco}' tem {n_vertices} vértices e {n_arestas} arestas — não convertido.")
+            else:
+                continue
+
+        # combinar todos os vértices do arquivo em sequência
+        if objetos_criados == 0:
+            all_vertices = []
+            for blk in objects:
+                all_vertices.extend(blk["vertices"])
+            if len(all_vertices) >= 16 and (len(all_vertices) % 16) == 0:
+                patches = []
+                for i in range(0, len(all_vertices), 16):
+                    block = all_vertices[i:i+16]
+                    patches.append([Ponto3D(*v) for v in block])
+                nome = garantir_nome_unico(os.path.splitext(os.path.basename(nome_arquivo))[0] or "Superficie")
+                try:
+                    surf = SuperficieBezier(patches, nome)
+                    display_file.adicionar(surf)
+                    print(f"[OBJ] Importado SuperficieBezier combinado: {nome} ({len(patches)} patches)")
+                    objetos_criados += 1
+                except Exception as e:
+                    print(f"[OBJ] erro ao adicionar SuperficieBezier combinado {nome}: {e}")
+            else:
+                print("[OBJ] Não foi possível detectar patches de 16 vértices. Nenhuma superfície importada.")
         return os.path.abspath(nome_arquivo)

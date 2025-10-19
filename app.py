@@ -132,6 +132,13 @@ class App(Tk):
         self.cop_z = DoubleVar(value=6)
         self.d_proj = DoubleVar(value=1)
 
+          # Botão OK para aplicar valores
+        ttk.Button(context_menu_frame, text="OK (Aplicar COP)", command=self.redesenhar).grid(column=0, row=11, pady=(5, 0))
+
+        # Botão para criar Superfície Bézier manualmente
+        ttk.Button(context_menu_frame, text="Adicionar Superfície Bézier", width=20, command=self.adicionar_superficie_popup).grid(column=0, row=16, pady=(8, 0))
+
+
         ttk.Label(context_menu_frame, text="COP x y z").grid(column=0, row=7)
         ttk.Entry(context_menu_frame, textvariable=self.cop_x, width=5).grid(column=0, row=8, sticky="w")
         ttk.Entry(context_menu_frame, textvariable=self.cop_y, width=5).grid(column=0, row=8)
@@ -146,6 +153,8 @@ class App(Tk):
         ttk.Button(context_menu_frame, text="COP ←", command=lambda: self.cop_x.set(self.cop_x.get()-1)).grid(column=0, row=13, sticky="w")
         ttk.Button(context_menu_frame, text="COP ↑", command=lambda: self.cop_y.set(self.cop_y.get()+1)).grid(column=0, row=12, sticky="e")
         ttk.Button(context_menu_frame, text="COP ↓", command=lambda: self.cop_y.set(self.cop_y.get()-1)).grid(column=0, row=13, sticky="e")
+
+        
     def _criar_canvas(self):
         self.canvas = Canvas(self, bg="white")
         self.canvas.grid(column=1, row=0, columnspan=2, sticky="nsew", padx=(0, 10), pady=(20, 0))
@@ -155,7 +164,7 @@ class App(Tk):
         transcript_label = Label(self, textvariable=self.text, relief="sunken", anchor="nw", height=4)
         transcript_label.grid(column=1, row=1, sticky="nsew", padx=(0, 10), pady=10)
 
-    def     redesenhar(self):
+    def redesenhar(self):
         print("Redesenhar chamado! Objetos:", [obj.nome for obj in self.display_file.objetos])
         self.canvas.delete("all")
         self.listbox_objetos.delete(0, END)
@@ -178,13 +187,13 @@ class App(Tk):
             self.objeto_selecionado.selecionado = True
 
         for obj in self.display_file.objetos:
-            if obj.__class__.__name__ == "Objeto3D":
-                print("Desenhando objeto 3D:", obj.nome)
+            if hasattr(obj, "desenhar_perspectiva"):
+                print("Desenhando objeto 3D/patch:", obj.nome)
                 obj.desenhar_perspectiva(
                     self.canvas,
                     self.viewport,
                     COP=(self.cop_x.get(), self.cop_y.get(), self.cop_z.get()),
-                    look_at=(1,1,0),  # centro do objeto
+                    look_at=(1,1,0),  # ajuste se necessário
                     d_proj=self.d_proj.get(),
                     modo_clipping=self.metodo_clipping.get()
                 )
@@ -341,7 +350,50 @@ class App(Tk):
         
     def abrir_popup_transformacoes(self):
             selecao = self.listbox_objetos.curselection()
-    
+    def adicionar_superficie_popup(self):
+        popup = Toplevel(self)
+        popup.title("Adicionar Superfície Bézier")
+        Label(popup, text="Cole os retalhos (um ou mais). Separe patches por linha em branco. Cada patch usa 16 pontos.").pack(padx=10, pady=5)
+        txt = Text(popup, width=70, height=20)
+        txt.pack(padx=10, pady=5)
+
+        def parse_and_add():
+            raw = txt.get("1.0", "end").strip()
+            if not raw:
+                messagebox.showwarning("Aviso", "Nenhum texto informado")
+                return
+            blocks = [b.strip() for b in raw.split("\n\n") if b.strip()]
+            patches_all = []
+            import re
+            float_re = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
+            for b in blocks:
+                nums = float_re.findall(b)
+                if len(nums) % 3 != 0:
+                    messagebox.showerror("Erro", f"Bloco possui {len(nums)} números, que não é múltiplo de 3.")
+                    return
+                if len(nums) != 16*3:
+                    messagebox.showerror("Erro", f"Cada patch precisa ter 16 pontos (48 números). Este bloco tem {len(nums)} números.")
+                    return
+                pts = []
+                for i in range(0, len(nums), 3):
+                    x = float(nums[i]); y = float(nums[i+1]); z = float(nums[i+2])
+                    pts.append((x, y, z))
+                patches_all.append(pts)
+            from objetos_3d import SuperficieBezier, Ponto3D
+            patches_pontos = []
+            for patch in patches_all:
+                patches_pontos.append([Ponto3D(x,y,z) for (x,y,z) in patch])
+            surf = SuperficieBezier(patches_pontos, nome=f"Superficie_{len([o for o in self.display_file.objetos if o.__class__.__name__=='SuperficieBezier'])+1}")
+            self.display_file.adicionar(surf)
+            popup.destroy()
+            self.redesenhar()
+            messagebox.showinfo("Sucesso", f"Superfície '{surf.nome}' adicionada com {len(patches_pontos)} retalhos.")
+
+        btn_frame = Frame(popup)
+        btn_frame.pack(pady=6)
+        Button(btn_frame, text="Adicionar", command=parse_and_add).pack(side="left", padx=6)
+        Button(btn_frame, text="Cancelar", command=popup.destroy).pack(side="right", padx=6)
+
 
 
 if __name__ == "__main__":

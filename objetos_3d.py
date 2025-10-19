@@ -1,5 +1,6 @@
 from transformacao3D import *
 from clipping import clip_reta_CS, clip_reta_NLN
+import numpy as np
 
 # Objetos
 class Ponto3D:
@@ -136,7 +137,144 @@ class Objeto3D:
 
         
 
+class SuperficieBezier:
+    def __init__(self, patches, nome="SuperficieBezier"):
+        self.patches = []
+        for patch in patches:
+            # garante que cada ponto é um Ponto3D
+            converted = []
+            for p in patch:
+                if isinstance(p, Ponto3D):
+                    converted.append(p)
+                else:
+                    # assume tupla (x,y,z)
+                    converted.append(Ponto3D(*p))
+            if len(converted) != 16:
+                raise ValueError("Cada retalho deve ter exatamente 16 pontos de controle")
+            self.patches.append(converted)
+        self.nome = nome
+        self.selecionado = False
 
+    @staticmethod
+    def _bernstein(u):
+        """Retorna lista [B0,B1,B2,B3] para u"""
+        b0 = (1-u)**3
+        b1 = 3*u*(1-u)**2
+        b2 = 3*(u**2)*(1-u)
+        b3 = u**3
+        return [b0, b1, b2, b3]
+
+    def avaliar_patch(self, patch, u, v):
+        Bu = self._bernstein(u)
+        Bv = self._bernstein(v)
+        x = y = z = 0.0
+        for i in range(4):
+            for j in range(4):
+                coef = Bu[i] * Bv[j]
+                p = patch[i*4 + j]
+                x += coef * p.x
+                y += coef * p.y
+                z += coef * p.z
+        return np.array([x, y, z])
+
+    def sample_patch(self, patch, u_res=10, v_res=10):
+        grid = []
+        for iv in range(v_res+1):
+            v = iv / v_res
+            row = []
+            for iu in range(u_res+1):
+                u = iu / u_res
+                pt = self.avaliar_patch(patch, u, v)
+                row.append(pt)
+            grid.append(row)
+        return grid  # rows by v then u
+
+    def projetar_perspectiva(self, COP, look_at, d_proj, u_res=10, v_res=10):
+        all_grids_proj = []
+        for patch in self.patches:
+            grid = self.sample_patch(patch, u_res=u_res, v_res=v_res)
+            proj_grid = []
+            for row in grid:
+                proj_row = []
+                for pt in row:
+                    x, y, z = pt
+                    cx, cy, cz = COP
+                    xr, yr, zr = x-cx, y-cy, z-cz
+                    vpn = (look_at[0]-cx, look_at[1]-cy, look_at[2]-cz)
+                    vx, vy, vz = vpn
+                    theta = np.arctan2(vx, vz)
+                    Ry = np.array([
+                        [np.cos(-theta), 0, np.sin(-theta)],
+                        [0, 1, 0],
+                        [-np.sin(-theta), 0, np.cos(-theta)]
+                    ])
+                    pt_rot = Ry @ np.array([xr, yr, zr])
+                    vpn_rot = Ry @ np.array([vx, vy, vz])
+                    phi = np.arctan2(vpn_rot[1], vpn_rot[2])
+                    Rx = np.array([
+                        [1, 0, 0],
+                        [0, np.cos(phi), -np.sin(phi)],
+                        [0, np.sin(phi), np.cos(phi)]
+                    ])
+                    pt_final = Rx @ pt_rot
+                    xf, yf, zf = pt_final
+                    if zf <= 0:
+                        proj_row.append(None)
+                    else:
+                        x_proj = xf * d_proj / zf
+                        y_proj = yf * d_proj / zf
+                        proj_row.append((x_proj, y_proj))
+                proj_grid.append(proj_row)
+            all_grids_proj.append(proj_grid)
+        return all_grids_proj
+
+    def desenhar_perspectiva(self, canvas, viewport, COP, look_at, d_proj, modo_clipping, u_res=10, v_res=10):
+        grids = self.projetar_perspectiva(COP, look_at, d_proj, u_res=u_res, v_res=v_res)
+        for grid in grids:
+            n_rows = len(grid)
+            n_cols = len(grid[0]) if n_rows>0 else 0
+            # linhas ao longo de u (cada linha)
+            for iv in range(n_rows):
+                for iu in range(n_cols - 1):
+                    p0 = grid[iv][iu]
+                    p1 = grid[iv][iu+1]
+                    if p0 is None or p1 is None:
+                        continue
+                    x0, y0 = p0; x1, y1 = p1
+                    match modo_clipping:
+                        case "Cohen-Sutherland":
+                            check = clip_reta_CS(x0, y0, x1, y1)
+                        case "Nicholl-Lee-Nicholl":
+                            check = clip_reta_NLN(x0, y0, x1, y1)
+                        case _:
+                            check = (x0, y0, x1, y1)
+                    if check is not None:
+                        x0c, y0c, x1c, y1c = check
+                        x_vp0, y_vp0 = viewport.scn_para_viewport(x0c, y0c)
+                        x_vp1, y_vp1 = viewport.scn_para_viewport(x1c, y1c)
+                        cor = "red" if self.selecionado else "black"
+                        canvas.create_line(x_vp0, y_vp0, x_vp1, y_vp1, fill=cor, width=1)
+            # linhas ao longo de v (cada coluna)
+            for iu in range(n_cols):
+                for iv in range(n_rows - 1):
+                    p0 = grid[iv][iu]
+                    p1 = grid[iv+1][iu]
+                    if p0 is None or p1 is None:
+                        continue
+                    x0, y0 = p0; x1, y1 = p1
+                    match modo_clipping:
+                        case "Cohen-Sutherland":
+                            check = clip_reta_CS(x0, y0, x1, y1)
+                        case "Nicholl-Lee-Nicholl":
+                            check = clip_reta_NLN(x0, y0, x1, y1)
+                        case _:
+                            check = (x0, y0, x1, y1)
+                    if check is not None:
+                        x0c, y0c, x1c, y1c = check
+                        x_vp0, y_vp0 = viewport.scn_para_viewport(x0c, y0c)
+                        x_vp1, y_vp1 = viewport.scn_para_viewport(x1c, y1c)
+                        cor = "red" if self.selecionado else "black"
+                        canvas.create_line(x_vp0, y_vp0, x_vp1, y_vp1, fill=cor, width=1)
 
 
 

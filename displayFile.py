@@ -71,6 +71,13 @@ class DisplayFile:
             pontos_str = ";".join([f"{p.x},{p.y},{p.z}" for p in obj.pontos])
             arestas_str = ";".join([f"{i},{j}" for i, j in obj.arestas])
             return f"Objeto3D;{obj.nome};{pontos_str};{arestas_str}"
+        elif obj.__class__.__name__ == "SuperficieBezier":
+            patches_repr = []
+            for patch in obj.patches:
+                pts = "|".join([f"{p.x},{p.y},{p.z}" for p in patch])
+                patches_repr.append(pts)
+            patches_joined = ";".join(patches_repr)
+            return f"SuperficieBezier;{obj.nome};{patches_joined}"
         else:
             return f"{obj.__class__.__name__};{vars(obj)}"
 
@@ -125,7 +132,7 @@ class DisplayFile:
             pontos_str_list = resto[0]
             arestas_str_list = resto[1] if len(resto) > 1 else ""
             pontos = []
-            p_coords_str = pontos_str_list.split(';')
+            p_coords_str = pontos_str_list.split(';') if pontos_str_list else []
             for p_str in p_coords_str:
                 try:
                     x, y, z = map(float, p_str.split(','))
@@ -134,7 +141,7 @@ class DisplayFile:
                     print(f"[WARN] Ponto 3D inválido em {nome}: {p_str}")
                     continue
             arestas = []
-            a_coords_str = arestas_str_list.split(';')
+            a_coords_str = arestas_str_list.split(';') if arestas_str_list else []
             for a_str in a_coords_str:
                 try:
                     i, j = map(int, a_str.split(','))
@@ -147,6 +154,36 @@ class DisplayFile:
             else:
                 print(f"[WARN] Objeto3D '{nome}' sem pontos ou arestas válidas.")
                 return None
+
+        elif tipo == "SuperficieBezier":
+            if len(partes) < 3:
+                print(f"[WARN] SuperficieBezier incompleta na linha: {linha}")
+                return None
+            _, nome, *patches_str = partes
+            patches = []
+            for patch_str in patches_str:
+                pt_strs = [s for s in patch_str.split("|") if s.strip()]
+                if len(pt_strs) != 16:
+                    print(f"[WARN] Patch com {len(pt_strs)} pontos em {nome}, esperado 16. Ignorando patch.")
+                    continue
+                patch = []
+                for p_str in pt_strs:
+                    try:
+                        x, y, z = map(float, p_str.split(','))
+                        patch.append(Ponto3D(x, y, z))
+                    except Exception as e:
+                        print(f"[WARN] Falha ao parsear ponto da superfície {nome}: {p_str} -> {e}")
+                if len(patch) == 16:
+                    patches.append(patch)
+            if patches:
+                return SuperficieBezier(patches, nome)
+            else:
+                print(f"[WARN] SuperficieBezier '{nome}' sem patches válidos.")
+                return None
+
+        else:
+            print(f"[WARN] Tipo de objeto desconhecido: {linha}")
+            return None            
     def adicionar_from_obj(self, nome, coords, tipo=None):
         """Adiciona um objeto vindo do importador OBJ"""
         if tipo == "reta" and len(coords) == 2:
